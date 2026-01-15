@@ -92,6 +92,7 @@ glimpse(ung_df)
 ### Save ungulate independent detection data frame
 write.csv(ung_df, "data/all_projects_ungulate_30min_ind_detections_20260114.csv", row.names = FALSE)
 
+##### Plotting detection counts ####
 ## Summarise the ungulate data by study area and detection count (ordered by study area and species)
 ung_count <- ung_df %>%
   group_by(study_area, species_common_name) %>%
@@ -102,5 +103,83 @@ ung_count <- ung_df %>%
 ung_count
 
 
-## testing - is this pushing to github??
+## Faceted bar plot figure of species detections by study area
+ung_plot1 <- ggplot(ung_count, aes(x = reorder(study_area, -count), y = count, fill = species_common_name)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ species_common_name, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Ungulate Detections by Study Area",
+    x = "Study Area",
+    y = "Independent Detections (30 min.)"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none" # remove legend
+  )
 
+win.graph()
+ung_plot1
+## Save ungulate detection plot
+## Save plot
+ggsave("figures/ungulate_ind_detections_30min_20260115.jpeg", plot = ung_plot1, width = 10, height = 6, units = "in", dpi = 300)
+
+
+
+
+
+#### Exploratory detection phenology ####
+glimpse(ung_df) #df has both start_time and end_time of independent detections
+class(ung_df$start_time) #POSIXct
+
+
+## Histogram of detection dates by study area
+ung_plot2 <- ggplot(ung_df, aes(x = as.Date(start_time), fill = species_common_name)) +
+  geom_histogram(binwidth = 7, position = "dodge") +
+  facet_wrap(~ study_area, ncol = 1, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Ungulate Detection Dates by Study Area",
+    x = "Detection Date",
+    y = "Number of Independent Detections (30 min.)"
+  )
+
+ung_plot2
+
+## Save ungulate phenology plot
+ggsave("figures/ungulate_detection_phenology_30min_20260115.jpeg", plot = ung_plot2, width = 10, height = 8, units = "in", dpi = 300)
+
+
+### Scatter plot by month-day (ignoring year) to see seasonal patterns across all years
+## Create column for month-day
+ung_df$det_month_day <- format(ung_df$start_time, "%m-%d") 
+
+# Convert month-day column to factor with levels ordered by calendar days
+ung_df$det_month_day <- factor(ung_df$det_month_day,
+                              levels = format(seq(as.Date("2000-01-01"),
+                                                  as.Date("2000-12-31"),
+                                                  by = "day"), "%m-%d"))
+class(ung_df$det_month_day) #factor
+
+
+# Get 30 days for x-axis breaks
+every_30_days <- levels(ung_df$det_month_day)[seq(1, length(levels(ung_df$det_month_day)), by = 30)]
+
+## Scatter plot of target spp detections by month-day, faceted by species common name (seasonal patterns)
+ung_tagged_months <- ggplot(ung_df, aes(x = det_month_day, y = after_stat(count), color = study_area)) +
+  geom_point(stat = "count", position = position_jitter(width = 0.3, height = 0), size = 2) +
+  scale_x_discrete(breaks = every_30_days) +
+  facet_wrap(~ species_common_name, scales = "free_y") +
+  labs(
+    title = "Phenology of Ungulate Detections",
+    x = "Month-Day",
+    y = "Independent Detections (30 min.)",
+    color = "Study Area"
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ung_tagged_months
+## Save plot
+ggsave("figures/ungulate_detection_phenology_20260115.jpeg", plot = ung_tagged_months, width = 10, height = 6, units = "in", dpi = 300)
