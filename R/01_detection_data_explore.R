@@ -1,7 +1,7 @@
 #################################
 ## 01_detection_data_explore.R
 ## Downloading camera data from WildTrax and preliminary exploration of ungulate detections
-## Started by Erin Tattersall on 12 January 2026
+## Started by Erin Tattersall on 14 January 2026
 ################################################
 
 library(tidyverse)
@@ -17,20 +17,20 @@ wt_auth()
 
 
 # #### Station locations from wildtrax ####
+
+cam_projects <- wt_get_projects("CAM")
+glimpse(cam_projects) ## lists all the projects I have access to - including public projects I'm not involved in
+## Filter to my target projects only, using project IDs: 712 (Thaidene Nene), 2183 (Fort Smith), 2102 (Norman Wells), 1906 (Sambaa K'e), 2935 (Gameti), 1465 (Edehzhie)
+cam_projects <- cam_projects %>% filter(project_id == "712" |
+                                          project_id == "2183" |
+                                          project_id == "2102" |
+                                          project_id == "1906" |
+                                          project_id == "2935" |
+                                          project_id == "1465")
+
+
+## Get raw camera data from all projects (note that this is PRE- species verification for game birds (13 Jan 2026), so will need to be re-downloaded once that's complete)
 ### Camera project reports already downloaded for nwtbm_phd_gamebirds - data frame list saved as RDS file and copied for this project
-# cam_projects <- wt_get_projects("CAM")
-# glimpse(cam_projects) ## lists all the projects I have access to - including public projects I'm not involved in
-# 
-# ## Filter to my target projects only, using project IDs: 712 (Thaidene Nene), 2183 (Fort Smith), 2102 (Norman Wells), 1906 (Sambaa K'e), 2935 (Gameti), 1465 (Edehzhie)
-# cam_projects <- cam_projects %>% filter(project_id == "712" |
-#                                           project_id == "2183" |
-#                                           project_id == "2102" |
-#                                           project_id == "1906" |
-#                                           project_id == "2935" |
-#                                           project_id == "1465")
-# 
-# 
-## Get raw camera data from all projects (note that this is PRE- species verification for game birds (12 Jan 2026), so will need to be re-downloaded once that's complete)
 # cam_data <- wt_download_report(project_id = cam_projects$project_id,
 #                                sensor_id = "CAM",
 #                                report = "main") # main reports include ALL DATA
@@ -92,7 +92,7 @@ glimpse(ung_df)
 ### Save ungulate independent detection data frame
 write.csv(ung_df, "data/all_projects_ungulate_30min_ind_detections_20260114.csv", row.names = FALSE)
 
-## Summarise the gb data by study area and detection count (ordered by study area and species)
+## Summarise the ungulate data by study area and detection count (ordered by study area and species)
 ung_count <- ung_df %>%
   group_by(study_area, species_common_name) %>%
   summarise(count = n()) %>%
