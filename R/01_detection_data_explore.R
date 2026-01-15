@@ -16,8 +16,8 @@ wt_auth()
 
 
 
-# #### Station locations from wildtrax ####
 
+## Get project information for my WildTrax projects
 cam_projects <- wt_get_projects("CAM")
 glimpse(cam_projects) ## lists all the projects I have access to - including public projects I'm not involved in
 ## Filter to my target projects only, using project IDs: 712 (Thaidene Nene), 2183 (Fort Smith), 2102 (Norman Wells), 1906 (Sambaa K'e), 2935 (Gameti), 1465 (Edehzhie)
@@ -183,3 +183,22 @@ ung_tagged_months <- ggplot(ung_df, aes(x = det_month_day, y = after_stat(count)
 ung_tagged_months
 ## Save plot
 ggsave("figures/ungulate_detection_phenology_20260115.jpeg", plot = ung_tagged_months, width = 10, height = 6, units = "in", dpi = 300)
+
+
+### Assess detection independence threshold ####
+## For each species, what is the mean time in front of camera per independent detection event?
+
+## Filter cam_data to target ungulate species only
+raw_ung_data <- lapply(cam_data, function(df) {
+  df %>% filter(species_common_name %in% target_spp)
+})
+## Confirm that only target species are included
+lapply(cam_data, function(df) {
+  length(unique(df$species_common_name))
+})
+lapply(raw_ung_data, function(df) {
+  length(unique(df$species_common_name))
+}) ## yes - matches spp_det_ung_count above
+
+glimpse(raw_ung_data)
+## Images are organized into sets (image_set_id) - it's not entirely clear what WildTrax defines as a set 
