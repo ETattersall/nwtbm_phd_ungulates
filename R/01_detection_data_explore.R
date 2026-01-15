@@ -185,20 +185,4 @@ ung_tagged_months
 ggsave("figures/ungulate_detection_phenology_20260115.jpeg", plot = ung_tagged_months, width = 10, height = 6, units = "in", dpi = 300)
 
 
-### Assess detection independence threshold ####
-## For each species, what is the mean time in front of camera per independent detection event?
-
-## Filter cam_data to target ungulate species only
-raw_ung_data <- lapply(cam_data, function(df) {
-  df %>% filter(species_common_name %in% target_spp)
-})
-## Confirm that only target species are included
-lapply(cam_data, function(df) {
-  length(unique(df$species_common_name))
-})
-lapply(raw_ung_data, function(df) {
-  length(unique(df$species_common_name))
-}) ## yes - matches spp_det_ung_count above
-
-glimpse(raw_ung_data)
-## Images are organized into sets (image_set_id) - it's not entirely clear what WildTrax defines as a set 
+#### End of script ####
