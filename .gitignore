@@ -1,0 +1,7 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data/
+wildtrax_login.R
+nwtbm_phd_ungulates.Rproj
