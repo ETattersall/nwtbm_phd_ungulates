@@ -126,6 +126,58 @@ ung_plot1
 ggsave("figures/ungulate_ind_detections_30min_20260115.jpeg", plot = ung_plot1, width = 10, height = 6, units = "in", dpi = 300)
 
 
+#### Naive occupancy ####
+
+## Use cam_data to get all locations sampled
+## First, bind all cam_data dfs in cam_data list into a single data frame with study area as an identifier column
+cam_df <- bind_rows(cam_data, .id = "study_area")
+length(unique(cam_df$location)) ## 706
+
+## Create a site by species detection matrix for all sampled locations
+site_species_cams <- cam_df %>%
+  distinct(study_area, location, species_common_name) %>% # get unique combinations of study area, location and species tags
+  mutate(detection = 1L) %>% # assign a detection value of 1 for each location-species combination (L for integer)
+  pivot_wider(names_from = species_common_name, values_from = detection, values_fill = 0L) # pivot to wide format, filling missing combinations with 0 (non-detection) as an integer
+
+## Filter for target species
+ung_site_spp <- site_species_cams %>%
+  select(study_area, location, "Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Caribou")
+
+
+## Create a faceted plot for naive occupancy (proportion of locations with detections) for each target species by study area)
+#Convert to long format for plotting
+ung_naive_long <- ung_site_spp %>%
+  pivot_longer(cols = c("Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Caribou"),
+               names_to = "species_common_name",
+               values_to = "detection")
+
+## For each study area and species, calculate the proportion of locations with detections
+ung_naive_summary <- ung_naive_long %>%
+  group_by(study_area, species_common_name) %>%
+  summarise(naive_occupancy = mean(detection), .groups = "drop") %>% # mean of detection column gives the proportion of locations with detections (naive occupancy)
+  arrange(study_area, desc(naive_occupancy))
+
+## Faceted bar plot of naive occupancy by study area and species
+win.graph()
+f_ung_naive <- ggplot(ung_naive_summary, aes(x = reorder(study_area, -naive_occupancy), y = naive_occupancy, fill = species_common_name)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ species_common_name, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Naive Occupancy by Species",
+    x = "Study Area",
+    y = "Naive Occupancy"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none" # remove legend
+  )
+f_ung_naive
+
+### Save plot
+ggsave("figures/ung_naive_occupancy_by_spp_20260204.jpeg", plot = f_ung_naive, width = 10, height = 6)
+
 
 
 
