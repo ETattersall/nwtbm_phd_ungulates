@@ -1,7 +1,7 @@
 ####################################
-## 05_fire_variable_explore.R
+## 03_fire_variable_explore.R
 ## Exploring spatial fire data
-## Started on Jul 30 2025
+## Started on Feb 13 2026
 ## Created by Erin Tattersall
 ####################################
 
@@ -9,8 +9,11 @@
 #### Environment set up ####
 ## Load required packages (should already be installed)
 
-list.of.packages <- c("sf",
+list.of.packages <- c("wildrtrax",
+       "sf",
        "lwgeom",
+       "data.table",
+       "tidyverse",
        "dplyr",
        "osmdata", 
        "stars",
@@ -37,74 +40,74 @@ new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"
 if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only = TRUE)
 
-## set working directory to file with NWT shapefiles
-getwd()
-list.files("data")
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd/data/NWT_GIS_Data")
+
+#### Load in camera locations from WildTrax ####
+## Authenticate into WildTrax. Access local script for WT_USERNAME and WT_PASSWORD (wildtrax_login.R - not shared on GitHub)
+source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME and WTPASSWORD
+wt_auth()
+
+
+## Get project information for my WildTrax projects
+cam_projects <- wt_get_projects("CAM")
+glimpse(cam_projects) ## lists all the projects I have access to - including public projects I'm not involved in
+## Filter to my target projects only, using project IDs: 712 (Thaidene Nene), 2183 (Fort Smith), 2102 (Norman Wells), 1906 (Sambaa K'e), 2935 (Gameti), 1465 (Edehzhie)
+cam_projects <- cam_projects %>% filter(project_id == "712" |
+                                          project_id == "2183" |
+                                          project_id == "2102" |
+                                          project_id == "1906" |
+                                          project_id == "2935" |
+                                          project_id == "1465")
+
+
+## Get sensor locations for each project ##
+#not working currently - use manual downloads (also not included in RDS list of main reports - need to download location reports individually)
+# cam_locs <- wt_download_report(project_id = cam_projects$project_id,
+#                                sensor_id = "CAM",
+#                                reports = "location")
+
+setwd("data/wt_location_data")
 list.files()
+cam_loc_files <- list.files(pattern = "\\.csv$")
 
 
-#### Load NWT_boundary
-nwt.boun <- st_read("NWT_boundary.shp")
+# Read and bind all CSVs, adding a column for the source file
+cam_locs <- rbindlist(lapply(cam_loc_files, function(file) {
+  dt <- fread(file)
+  dt[, source_file := basename(file)]
+  return(dt)
+}))
 
-## Convert to NWT Lambert Conformal Conic projection, which is  the GNWT Standard projection
-st_crs(nwt.boun) #NAD 83
-nwt.boun <- st_transform(nwt.boun, crs = 3580) # 3580 is the NWT Lambert
-st_bbox(nwt.boun)
+summary(cam_locs) ## No NAs in lat/long columns
 
-
-plot(nwt.boun)
-
-### Load Thaidene Nene, SambaaK'e, Gameti, Edehzhie shapefiles, Fort Smith, Norman Wells polygons as a list ####
-area_list <- list("ThaideneNene.shp", 
-                  "Sambaa_Ke_protected_area.shp", 
-                  "Gameti2023.shp", 
-                  "Edehzhie.shp", 
-                  "FortSmith2022_polygon.kml", 
-                  "NormanWells2022_polygon.kml")
-
-## Will need list of study area names later
-area_names <- c("Thaidene Nëné", 
-                 "Sambaa K'e", 
-                 "Gamètì", 
-                 "Edéhzhíe", 
-                 "Fort Smith", 
-                 "Norman Wells")
-
-## Load polygons as sf objects
-area_polys <- lapply(area_list, st_read)
-class(area_polys[[1]]) # sf "data frame"
+#return to base directory
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
 
 
-## Convert all to nwt Lambert projection for area calculations
-area_polys_3580 <- lapply(area_polys, function(x) st_transform(x, crs = 3580))
+### Add a column for study area
+### Add a column for study area
+cam_locs <- cam_locs %>%
+  mutate(study_area = case_when(
+    str_detect(source_file, "Edéhzhíe") ~ "Edéhzhíe",
+    str_detect(source_file, "Fort_Smith") ~ "FortSmith",
+    str_detect(source_file, "Gameti") ~ "Gameti",
+    str_detect(source_file, "Norman_Wells") ~ "NormanWells",
+    str_detect(source_file, "Sambaa_K'e") ~ "SambaaK'e",
+    str_detect(source_file, "Thaidene_Nëné") ~ "ThaideneNëné",
+    TRUE ~ NA_character_  # Default case if no match
+  ))
 
-## Add study area names to polygons
-area_polys_3580 <- lapply(seq_along(area_polys_3580), function(i) {
-  area_polys_3580[[i]]$name <- area_names[i] # add study area names
-  return(area_polys_3580[[i]])
-})
+## Remove source_file column
+cam_locs <- cam_locs %>%
+  select(-source_file)
 
+glimpse(cam_locs)
+table(is.na(cam_locs$latitude))
+table(is.na(cam_locs$longitude))
+## Confirmed no NAs in lat/long
+class(cam_locs) # data.table
 
-# Step 1: Extract only geometry and name from each polygon, including making geometry valid
-area_polys_clean <- lapply(seq_along(area_polys_3580), function(i) {
-  geom <- st_make_valid(st_geometry(area_polys_3580[[i]]))
-  st_sf(name = area_names[i], geometry = geom)
-})
-
-# Step 2: Combine into a single sf object
-area_sf <- do.call(rbind, area_polys_clean)
-
-
-## Test plot
-ggplot() +
-  geom_sf(data = area_sf, fill = NA, color = "black") +
-  geom_sf_text(data = area_sf, aes(label = name), size = 5, color = "blue")
-
-
-### Save area polygons as shapefile
-st_write(area_sf, "NWTBM_6StudyArea_polygons.shp", delete_dsn = TRUE) # overwrite existing file
-
+### Save cam_locs as csv file
+write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260213.csv", row.names = FALSE)
 
 
 #### Load Fire History data ####
