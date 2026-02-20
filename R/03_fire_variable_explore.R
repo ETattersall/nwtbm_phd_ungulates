@@ -60,7 +60,7 @@ cam_projects <- cam_projects %>% filter(project_id == "712" |
 
 
 ## Get sensor locations for each project ##
-#not working currently - use manual downloads (also not included in RDS list of main reports - need to download location reports individually)
+# not working currently - use manual downloads (also not included in RDS list of main reports - need to download location reports individually)
 # cam_locs <- wt_download_report(project_id = cam_projects$project_id,
 #                                sensor_id = "CAM",
 #                                reports = "location")
@@ -68,7 +68,7 @@ cam_projects <- cam_projects %>% filter(project_id == "712" |
 setwd("data/wt_location_data")
 list.files()
 cam_loc_files <- list.files(pattern = "\\.csv$")
-
+cam_loc_files
 
 # Read and bind all CSVs, adding a column for the source file
 cam_locs <- rbindlist(lapply(cam_loc_files, function(file) {
@@ -88,11 +88,11 @@ setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
 cam_locs <- cam_locs %>%
   mutate(study_area = case_when(
     str_detect(source_file, "Edéhzhíe") ~ "Edéhzhíe",
-    str_detect(source_file, "Fort_Smith") ~ "FortSmith",
+    str_detect(source_file, "FortSmith") ~ "FortSmith",
     str_detect(source_file, "Gameti") ~ "Gameti",
-    str_detect(source_file, "Norman_Wells") ~ "NormanWells",
-    str_detect(source_file, "Sambaa_K'e") ~ "SambaaK'e",
-    str_detect(source_file, "Thaidene_Nëné") ~ "ThaideneNëné",
+    str_detect(source_file, "NormanWells") ~ "NormanWells",
+    str_detect(source_file, "SambaaK'e") ~ "SambaaK'e",
+    str_detect(source_file, "ThaideneNëné") ~ "ThaideneNëné",
     TRUE ~ NA_character_  # Default case if no match
   ))
 
@@ -102,12 +102,67 @@ cam_locs <- cam_locs %>%
 
 glimpse(cam_locs)
 table(is.na(cam_locs$latitude))
-table(is.na(cam_locs$longitude))
-## Confirmed no NAs in lat/long
+table(is.na(cam_locs$longitude)) ## Confirmed no NAs in lat/long
+table(is.na(cam_locs$study_area)) # no NAs in study area column either, so all cameras were successfully assigned to a study area
+
 class(cam_locs) # data.table
 
 ### Save cam_locs as csv file
-write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260213.csv", row.names = FALSE)
+write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260219.csv", row.names = FALSE)
+table(cam_locs$study_area)
+
+
+### Plot camera locations to check they look correct
+cam_locs_sf <- st_as_sf(cam_locs, coords = c("longitude", "latitude"), crs = 4326) # convert to sf object with WGS 84 CRS
+plot(cam_locs_sf["study_area"]) # plot camera locations colored by study area 
+
+## Within each study area, calculate pairwise distances between locations (in meters) using st_distance function from sf package
+cam_locs_sf <- st_transform(cam_locs_sf, crs = 3580) # transform to NWT Lambert Area projection for accurate distance calculations in meters
+
+
+# Function to compute pairwise distance summary for one study area
+distance_summary <- function(df) {
+  # Compute distance matrix
+  dmat <- st_distance(df)
+  # Convert to numeric matrix
+  dmat <- as.matrix(dmat)
+  # Keep only lower triangle (no duplicates, no diagonal)
+  dvals <- dmat[lower.tri(dmat)]
+  tibble(
+    study_area = unique(df$study_area),
+    mean_dist = mean(dvals),
+    min_dist  = min(dvals),
+    max_dist  = max(dvals)
+  )
+}
+
+
+## TDN locations 27m apart - three stations accidentally deployed twice (032-01A/B, 032-02A/B, 032-03A/B)
+## Otherwise, minimum distances between cameras = 114m in NW.
+
+# ## Which locations are 0m apart in Norman Wells? In cam_locs, which rows have identical lat/long coordinates? 
+## (These have been corrected in my downloaded copy of the csv, not yet on WildTrax (19 Feb 2026))
+# norman_wells_locs <- cam_locs %>% filter(study_area == "NormanWells")
+# norman_wells_locs <- norman_wells_locs %>%
+#   mutate(lat_long = paste(latitude, longitude)) # create a combined lat/long column for easier comparison
+# duplicate_locs <- norman_wells_locs %>%
+#   group_by(lat_long) %>%
+#   filter(n() > 1) # keep only rows with duplicate lat/long values 
+# 
+# ## BMS-NRA-050-16 and BMS-NRA-050-18 have same coordinates - error in WildTrax
+# ## 050-18 should be 65.35197, -126.52474
+
+
+ ## Total distance summaries (not split by study area)
+mean(dist_sa$mean_dist) #65.3 km
+min(dist_sa$min_dist) # 27 m (or 114 m, if we exclude the three stations that were accidentally deployed twice in TDN)
+max(dist_sa$max_dist) # 282 km
+
+## Buffer size selections: could assume 100m, as minimal distance between stations, represents 4th order selection (i.e foraging patch)
+## 500 m buffer is fairly standard, representing 3rd order selection (i.e. selecting habitat components in a home range), despite variance across species
+
+
+
 
 
 #### Load Fire History data ####
