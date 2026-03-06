@@ -205,7 +205,7 @@ fires_100m_buffer <- st_intersection(nwt_fires, cams_100m_buffer)
 fires_500m_buffer <- st_intersection(nwt_fires, cams_500m_buffer)
 
 
-
+crs(fires_100m_buffer) # check CRS of fire data within buffers
 
 
 ## Quick summary of fire years represented
@@ -218,13 +218,152 @@ hist(fires_100m_buffer$POLY_HA) # total area of fire polygons in hectares using 
 hist(fires_500m_buffer$POLY_HA)
 hist(nwt_fires_boun$ADJ_HA) # adjusted area burned (see documentation for details)
 
+plot(fires_100m_buffer["YEAR"]) # map of fire years within 100m buffer around camera locations
+plot(fires_500m_buffer["YEAR"]) # map of fire years within 500m buffer around camera locations
+
+## Not all sensor locations have fire history data within 100m or 500m buffers. Some locations have multiple fire polygons within the buffers
+length(unique(fires_100m_buffer$location)) # 336 locations have fire history data within 100m buffer
+length(unique(fires_500m_buffer$location)) # 360 locations have fire history data within 500m buffer
 
 #### Summary statistics ####
 
-## Histogram of fire years within each study area (100m buffer)
+## What is the proportion of burned/unburned area around camera locations? Stick to 500m buffer for simplicity
+# For 500m around each camera location, calculate total area of fire polygons (in hectares) and divide by total area of 500m buffer (in m^2) to get proportion of burned area within 500m buffer
+# total area of 500m buffer = pi *(500^2) m^2 = 785398.16 m^2
+
+
+## For each unique location in fires_500m_buffer, calculate total area of all fire polygons within 500m buffers
+## Result should be a spatial data frame with one row per unique location, and columns for total burned area within 500m buffers
+
+#### Burned area within 100m buffer (not using right now) ####
+burned_area_100m <- fires_100m_buffer %>%
+  group_by(study_area, location) %>% ## group all polygons with same location and study area together
+  summarise(geometry = st_union(geometry)) %>% # combine all fire polygons from the same location
+  mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
+  mutate(proportion_burned_100m = as.numeric(burned_area_m2/(pi * (100^2)))) %>%  # calculate proportion of burned area within 100m buffer (convert to numeric to avoid units issues)
+ st_drop_geometry() # drop geometry for easier joining with cam_locs_sf
+
+
+#### Burned area within 500m buffer ####
+burned_area_500m <- fires_500m_buffer %>% 
+  group_by(study_area, location) %>% ## group all polygons with same location and study area together
+  summarise(geometry = st_union(geometry)) %>% # combine all fire polygons from the same location
+  mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
+  mutate(proportion_burned_500m = as.numeric(burned_area_m2/(pi * (500^2)))) %>%  # calculate proportion of burned area within 500m buffer (convert to numeric to avoid units issues
+ st_drop_geometry() # drop geometry for easier joining with cam_locs_sf
+  
+str(burned_area_500m$location) 
+str(cam_locs_sf$location)
+
+## add proportion_burned_m2 to cam_locs_sf for 100m and 500m buffers, adding a 0 value for locations with no fire history data within the buffer
+cam_locs_burnedprop <- cam_locs_sf %>%
+  left_join(
+    burned_area_100m %>% 
+      select(location, proportion_burned_100m),
+    by = c("study_area", "location") ## join 100m burn by location to match fire data to camera locations
+    ) %>%
+  left_join(burned_area_500m %>% 
+  select(location, proportion_burned_500m),
+  by = c("study_area", "location") ## join 500m burn by location to match fire data to camera locations
+    ) %>%
+  mutate(
+    proportion_burned_100m = ifelse(is.na(proportion_burned_100m), 0, proportion_burned_100m),
+    proportion_burned_500m = ifelse(is.na(proportion_burned_500m), 0, proportion_burned_500m)) ## replace NA values with 0 for locations with no fire history data within the buffer
+
+glimpse(cam_locs_burnedprop) ## check that the new columns have been added correctly
+summary(cam_locs_burnedprop) ## most locations have 0 burned area within 100m buffer, but some have up to 100% burned area
+class(cam_locs_burnedprop) # sf object with 706 rows and 9 columns (including geometry)
+
+
+## Histogram of proportion of burned area within 100m and 500m buffers - proportion burned on the x-axis (binned to 0.1 intervals), frequency on the y-axis
+hist_burned_100m <- cam_locs_burnedprop %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = proportion_burned_100m)) +
+  geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
+  labs(title = "Distribution of Proportion of Burned Area within 100m Buffer of Camera Locations",
+       x = "Proportion of Burned Area",
+       y = "Count of Locations") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16))
+
+win.graph()
+hist_burned_100m
+## save
+ggsave("figures/fire_explore/propburned_100mbuffer_20260305.png", hist_burned_100m, width = 12, height = 8, dpi = 300)
+
+hist_burned_500m <- cam_locs_burnedprop %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = proportion_burned_500m)) +
+  geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
+  labs(title = "Distribution of Proportion of Burned Area within 500m Buffer of Camera Locations",
+       x = "Proportion of Burned Area",
+       y = "Count of Locations") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16))
+
+win.graph()
+hist_burned_500m
+## save
+ggsave("figures/fire_explore/propburned_500mbuffer_20260305.png", hist_burned_500m, width = 12, height = 8, dpi = 300)
+
+## facet by study area
+#100m buffer
+hist_burned_sa_100m <- cam_locs_burnedprop %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = proportion_burned_100m)) +
+  geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
+  facet_wrap(~ study_area) +
+  labs(title = "Distribution of Proportion of Burned Area within 100m Buffer of Camera Locations",
+       x = "Proportion of Burned Area",
+       y = "Count of Locations") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16))
+
+win.graph()
+hist_burned_sa_100m
+## save
+ggsave("figures/fire_explore/propburned_100mbuffer_studyarea_20260305.png", hist_burned_sa_100m, width = 12, height = 8, dpi = 300)
+
+#500m buffer
+hist_burned_sa_500m <- cam_locs_burnedprop %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = proportion_burned_500m)) +
+  geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
+  facet_wrap(~ study_area) +
+  labs(title = "Distribution of Proportion of Burned Area within 500m Buffer of Camera Locations",
+       x = "Proportion of Burned Area",
+       y = "Count of Locations") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16))
+
+win.graph()
+hist_burned_sa_500m
+## save
+ggsave("figures/fire_explore/propburned_500mbuffer_studyarea_20260305.png", hist_burned_sa_500m, width = 12, height = 8, dpi = 300)
+
+## Proportion of burned/unburned areas around cameras has a biphasic distribution with peaks at 0 (unburned) and 1 (fully burned)
+## Increasing the scale of measurement from 100m to 500m increases the proportion burned somewhat, but distrib is still uneven
+## Removing some of the older fires (e.g., considering them unburned after a certain number of years) would decrease proportion of areas considered burned, which might help even out the distribution
+## Could assume that after a certain number of years post-fire, the area would be regenerated to either deciduous shrub/mixedwood or deciduous forest (i.e., remove fire polygons prior to that time)
+
+
+
+
+
+#### Histogram of fire years within each study area (100m buffer) ####
 glimpse(fires_100m_buffer)
-
-
 ## 100m buffer histogram (binned to 10 years to reduce gaps in data, since many years don't have fire representation)
 hist_fires_100 <- fires_100m_buffer %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
@@ -269,6 +408,46 @@ ggsave("figures/fire_explore/hist_fires_500mbuffer_20260224.png", hist_fires_500
 
 ## 100 and 500m buffers have similar representation of fire years
 
+## NO FACETING - Fire History across all study areas (100m buffer)
+nwt_fire_hist_100 <- fires_100m_buffer %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = YEAR)) +
+  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
+  labs(title = "Distribution of Fire Years within 100m Buffer of Camera Locations - all study areas",
+       x = "Fire Year",
+       y = "Count of Fires") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+nwt_fire_hist_100
+## save
+ggsave("figures/fire_explore/allSAs_hist_fires_100mbuffer_20260303.png", nwt_fire_hist_100, width = 12, height = 8, dpi = 300)
+
+## 500m buffer
+nwt_fire_hist_500 <- fires_500m_buffer %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = YEAR)) +
+  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
+  labs(title = "Distribution of Fire Years within 500m Buffer of Camera Locations - all study areas",
+       x = "Fire Year",
+       y = "Count of Fires") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+nwt_fire_hist_500
+## save
+ggsave("figures/fire_explore/allSAs_hist_fires_500mbuffer_20260303.png", nwt_fire_hist_500, width = 12, height = 8, dpi = 300)
+
 ## Convert fire years to burn age (or time since fire for each year of camera data)
 ## Need a year from which to calculate time since fire - use the last year of data collection for each study area
 ## 2022 for TDN
@@ -296,5 +475,23 @@ gg_fire_100 <- ggplot() +
 
 gg_fire_100
 
+### Map of all NWT fire history plus sensor locations (including 500m buffers for visibility)
+gg_nwt_fires <- ggplot() +
+  geom_sf(data = nwt_fires, aes(color = YEAR), size = 0.5) + # all NWT fire polygons
+  geom_sf(data = cams_500m_buffer, fill = NA, color = "blue", size = 0.5) + # 500m buffers around camera locations
+  geom_sf(data = cam_locs_sf, color = "black", size = 1) + # camera locations
+  scale_color_gradient(low = "yellow", high = "red") + # red gradient for more recent burns
+  labs(title = "NWT Fire History (1972 - 2024) with Camera Locations",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Fire Year") +
+  theme(legend.position = "right") +
+  coord_sf(xlim = c(-1026000, 580000), ylim = c(8100000, 9360000), expand = FALSE) + # set limits to bounding box of NWT fire layer (plus a little extra buffer)
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(legend.title= element_text(size = 16))
 
-
+gg_nwt_fires
