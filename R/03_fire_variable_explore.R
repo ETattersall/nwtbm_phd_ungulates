@@ -360,8 +360,6 @@ ggsave("figures/fire_explore/propburned_500mbuffer_studyarea_20260305.png", hist
 
 
 
-
-
 #### Histogram of fire years within each study area (100m buffer) ####
 glimpse(fires_100m_buffer)
 ## 100m buffer histogram (binned to 10 years to reduce gaps in data, since many years don't have fire representation)
@@ -449,10 +447,120 @@ nwt_fire_hist_500
 ggsave("figures/fire_explore/allSAs_hist_fires_500mbuffer_20260303.png", nwt_fire_hist_500, width = 12, height = 8, dpi = 300)
 
 ## Convert fire years to burn age (or time since fire for each year of camera data)
-## Need a year from which to calculate time since fire - use the last year of data collection for each study area
-## 2022 for TDN
+## Need a year from which to calculate time since fire - use the first year of data collection for each study area
+## 2021 for Edehzhie and TDN, 2022 for Norman Wells and Sambaa K'e, 2023 for Fort Smith and Gameti
+## Need to make sure fire date isn't after deployment date (but cam_locs doesn't have deployment date. Will need to check stations with 0 - or negative! - values later)
 
+glimpse(fires_500m_buffer)
 
+## Create Year0 for fires_500m_buffer
+fires_500m_buffer <- fires_500m_buffer %>%
+  mutate(Year0 = case_when(
+    str_detect(study_area, "Edéhzhíe") ~ "2021",
+    str_detect(study_area, "FortSmith") ~ "2023",
+    str_detect(study_area, "Gameti") ~ "2023",
+    str_detect(study_area, "NormanWells") ~ "2022",
+    str_detect(study_area, "SambaaK'e") ~ "2022",
+    str_detect(study_area, "ThaideneNëné") ~ "2021",
+    TRUE ~ NA_character_  # Default case if no match
+  ))
+
+fires_500m_buffer$Year0 <- as.numeric(fires_500m_buffer$Year0)
+glimpse(fires_500m_buffer)
+
+fires_500m_buffer$FireAge <- fires_500m_buffer$Year0 - fires_500m_buffer$YEAR
+summary(fires_500m_buffer$FireAge)
+hist(fires_500m_buffer$FireAge)
+
+## how many (and which ones) are negative values?
+neg.fire.age <- fires_500m_buffer[fires_500m_buffer$FireAge < 0, ]
+table(neg.fire.age$study_area) # 10 Edehzhie, 6 Sambaa K'e, 6 ThaideneNene
+## Can remove the Edehzhie and TDN ones (fire doesn't occur during deployment period)
+## Sambaa K'e fires occurred after retrieval (March 2023)
+
+fires_500m_buffer <- fires_500m_buffer[!fires_500m_buffer$FireAge < 0, ]
+summary(fires_500m_buffer$FireAge)
+
+## Faceted plot of Fire Age for 500m buffer
+fireage_500 <- fires_500m_buffer %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = FireAge)) +
+  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
+  facet_wrap(~ study_area) +
+  labs(title = "Distribution of Fire Age within 500m Buffer of Camera Locations",
+       x = "Fire Age",
+       y = "Count of Fires") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+fireage_500
+## save
+ggsave("figures/fire_explore/fireages_byarea_500mbuffer_20260306.png", fireage_500, width = 12, height = 8, dpi = 300)
+
+## Not faceted
+fireage_all_500 <- fires_500m_buffer %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = FireAge)) +
+  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
+  labs(title = "Distribution of Fire Age within 500m Buffer of Camera Locations",
+       x = "Fire Age",
+       y = "Count of Fires") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+fireage_all_500
+## save
+ggsave("figures/fire_explore/fireages_500mbuffer_20260306.png", fireage_all_500, width = 12, height = 8, dpi = 300)
+
+## How many sites have more than 1 fire polygon within 500m?
+table(duplicated(fires_500m_buffer$location)) #78 sites have multiple fire polygons
+## How many polygons are duplicated across sites (i.e. polygons that include multiple sites)
+table(duplicated(fires_500m_buffer$NFIREID)) #379 polygon IDs match another
+
+length(unique(fires_500m_buffer$NFIREID)) # 48 unique fire polygons represented
+
+#### Is there a relationship between fire age and fire size?
+
+## Can use POLY_HA in fires_500m_buffer, but there will be duplicates because some fires cover multiple sites. But that's okay for this exploration
+hist(fires_500m_buffer$POLY_HA) # fire sizes are highly skewed, with many small fires and a few large fires
+fire_age_size <- fires_500m_buffer %>% 
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = FireAge, y = POLY_HA)) +
+  geom_point() +
+  labs(title = "Relationship between Fire Age and Fire Size (for fires within 500m of sites)",
+       x = "Fire Age",
+       y = "Fire Size (HA)") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+fire_age_size
+
+## add regression line with 95% confidence intervals to fire_age_size
+fire_age_size <- fire_age_size + geom_smooth(method = "lm", se = TRUE, color = "purple")
+fire_age_size
+
+## Assessing relationship between fire age and fire size with a linear model
+glimpse(fires_500m_buffer)
+fires_500m_buffer$location <- as.factor(fires_500m_buffer$location) ## convert location to factor for use as random effect in GLMs
+lm(POLY_HA ~ FireAge, data = fires_500m_buffer) %>% summary() ## Low R-squared (low correlation) but significant relationship
+glm(POLY_HA ~ FireAge, data = fires_500m_buffer, family = "poisson") %>% summary() ## Similar results with a GLM using a gamma distribution to account for skewed fire size data)
+
+## would ideally use a random effect for location, but it doesn't matter so much for the exploration. 
 
 ### Mapping ####
 ### Initial map of fires buffered to 100m around camera locations (no boundaries or basemaps)
