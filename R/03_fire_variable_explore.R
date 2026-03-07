@@ -532,7 +532,7 @@ length(unique(fires_500m_buffer$NFIREID)) # 48 unique fire polygons represented
 #### Is there a relationship between fire age and fire size?
 
 ## Can use POLY_HA in fires_500m_buffer, but there will be duplicates because some fires cover multiple sites. But that's okay for this exploration
-hist(fires_500m_buffer$POLY_HA) # fire sizes are highly skewed, with many small fires and a few large fires
+hist(fires_500m_buffer$POLY_HA) ## fire sizes follow a general poisson distribution, with many small fires and few large fires (outliers up to 800 000 ha) 
 fire_age_size <- fires_500m_buffer %>% 
   st_drop_geometry() %>% # drop geometry for easier plotting
   ggplot(aes(x = FireAge, y = POLY_HA)) +
