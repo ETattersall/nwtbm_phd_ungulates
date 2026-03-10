@@ -1,35 +1,34 @@
 ####################################
-## 03_fire_variable_explore.R
-## Exploring spatial fire data
+## 04_fire_variable_explore.R
+## Initial exploration of NBAC fire data for all camera locations
 ## Started on Feb 13 2026
 ## Created by Erin Tattersall
 ####################################
-
 
 #### Environment set up ####
 ## Load required packages (should already be installed)
 
 list.of.packages <- c("wildrtrax",
-       "sf",
-       "lwgeom",
-       "data.table",
-       "tidyverse",
-       "dplyr",
-       "osmdata", 
-       "stars",
-       "ggspatial",
-       "cowplot",
-       "leaflet",
-       "terra", 
-       "maptiles", 
-       "ggplot2", 
-       "tidyterra", 
-       "ggspatial",
-       "viridis",
-       "corrplot",
-       "kableExtra",
-       "lubridate",
-       "purrr")
+                      "sf",
+                      "lwgeom",
+                      "data.table",
+                      "tidyverse",
+                      "dplyr",
+                      "osmdata", 
+                      "stars",
+                      "ggspatial",
+                      "cowplot",
+                      "leaflet",
+                      "terra", 
+                      "maptiles", 
+                      "ggplot2", 
+                      "tidyterra", 
+                      "ggspatial",
+                      "viridis",
+                      "corrplot",
+                      "kableExtra",
+                      "lubridate",
+                      "purrr")
 
 
 
@@ -40,139 +39,12 @@ new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"
 if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only = TRUE)
 
+## Read in in cam_locs_sf, cams_100m_buffer, and cams_500m_buffer from R/03_location_data.R
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/wt_location_data")
+cam_locs_sf <- st_read("all_projects_cam_locations_20260310.shp")
+cams_100m_buffer <- st_read("cams_100m_buffer.shp")
+cams_500m_buffer <- st_read("cams_500m_buffer.shp")
 
-#### Load in camera locations from WildTrax ####
-## Authenticate into WildTrax. Access local script for WT_USERNAME and WT_PASSWORD (wildtrax_login.R - not shared on GitHub)
-source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME and WTPASSWORD
-wt_auth()
-
-
-## Get project information for my WildTrax projects
-cam_projects <- wt_get_projects("CAM")
-glimpse(cam_projects) ## lists all the projects I have access to - including public projects I'm not involved in
-## Filter to my target projects only, using project IDs: 712 (Thaidene Nene), 2183 (Fort Smith), 2102 (Norman Wells), 1906 (Sambaa K'e), 2935 (Gameti), 1465 (Edehzhie)
-cam_projects <- cam_projects %>% filter(project_id == "712" |
-                                          project_id == "2183" |
-                                          project_id == "2102" |
-                                          project_id == "1906" |
-                                          project_id == "2935" |
-                                          project_id == "1465")
-
-
-## Get sensor locations for each project ##
-# not working currently - use manual downloads (also not included in RDS list of main reports - need to download location reports individually)
-# cam_locs <- wt_download_report(project_id = cam_projects$project_id,
-#                                sensor_id = "CAM",
-#                                reports = "location")
-
-setwd("data/wt_location_data")
-list.files()
-cam_loc_files <- list.files(pattern = "\\.csv$")
-cam_loc_files
-
-# Read and bind all CSVs, adding a column for the source file
-cam_locs <- rbindlist(lapply(cam_loc_files, function(file) {
-  dt <- fread(file)
-  dt[, source_file := basename(file)]
-  return(dt)
-}))
-
-summary(cam_locs) ## No NAs in lat/long columns
-
-#return to base directory
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
-
-
-### Add a column for study area
-### Add a column for study area
-cam_locs <- cam_locs %>%
-  mutate(study_area = case_when(
-    str_detect(source_file, "Edéhzhíe") ~ "Edéhzhíe",
-    str_detect(source_file, "FortSmith") ~ "FortSmith",
-    str_detect(source_file, "Gameti") ~ "Gameti",
-    str_detect(source_file, "NormanWells") ~ "NormanWells",
-    str_detect(source_file, "SambaaK'e") ~ "SambaaK'e",
-    str_detect(source_file, "ThaideneNëné") ~ "ThaideneNëné",
-    TRUE ~ NA_character_  # Default case if no match
-  ))
-
-## Remove source_file column
-cam_locs <- cam_locs %>%
-  select(-source_file)
-
-glimpse(cam_locs)
-table(is.na(cam_locs$latitude))
-table(is.na(cam_locs$longitude)) ## Confirmed no NAs in lat/long
-table(is.na(cam_locs$study_area)) # no NAs in study area column either, so all cameras were successfully assigned to a study area
-
-class(cam_locs) # data.table
-
-### Save cam_locs as csv file
-write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260224.csv", row.names = FALSE)
-table(cam_locs$study_area)
-
-
-### Plot camera locations to check they look correct
-cam_locs_sf <- st_as_sf(cam_locs, coords = c("longitude", "latitude"), crs = 4326) # convert to sf object with WGS 84 CRS
-plot(cam_locs_sf["study_area"]) # plot camera locations colored by study area 
-
-## Within each study area, calculate pairwise distances between locations (in meters) using st_distance function from sf package
-cam_locs_sf <- st_transform(cam_locs_sf, crs = 3580) # transform to NWT Lambert Area projection for accurate distance calculations in meters
-
-
-# Function to compute pairwise distance summary for one study area
-distance_summary <- function(df) {
-  # Compute distance matrix
-  dmat <- st_distance(df)
-  # Convert to numeric matrix
-  dmat <- as.matrix(dmat)
-  # Keep only lower triangle (no duplicates, no diagonal)
-  dvals <- dmat[lower.tri(dmat)]
-  tibble(
-    study_area = unique(df$study_area),
-    mean_dist = mean(dvals),
-    min_dist  = min(dvals),
-    max_dist  = max(dvals)
-  )
-}
-
-## Apply distance_summary function to each study area and combine results into a single data frame
-dist_sa <- cam_locs_sf %>%
-  group_by(study_area) %>%
-  group_modify(~ distance_summary(.x)) %>%
-  ungroup()
-
-
-## TDN locations 27m apart - three stations accidentally deployed twice (032-01A/B, 032-02A/B, 032-03A/B)
-## Otherwise, minimum distances between cameras = 114m in NW.
-
-# ## Which locations are 0m apart in Norman Wells? In cam_locs, which rows have identical lat/long coordinates? 
-## (These have been corrected in my downloaded copy of the csv, not yet on WildTrax (19 Feb 2026))
-# norman_wells_locs <- cam_locs %>% filter(study_area == "NormanWells")
-# norman_wells_locs <- norman_wells_locs %>%
-#   mutate(lat_long = paste(latitude, longitude)) # create a combined lat/long column for easier comparison
-# duplicate_locs <- norman_wells_locs %>%
-#   group_by(lat_long) %>%
-#   filter(n() > 1) # keep only rows with duplicate lat/long values 
-# 
-# ## BMS-NRA-050-16 and BMS-NRA-050-18 have same coordinates - error in WildTrax
-# ## 050-18 should be 65.35197, -126.52474
-
-
- ## Total distance summaries (not split by study area)
-mean(dist_sa$mean_dist) #65.3 km
-min(dist_sa$min_dist) # 27 m (or 114 m, if we exclude the three stations that were accidentally deployed twice in TDN)
-max(dist_sa$max_dist) # 282 km
-
-#### Buffer size selections: ####
-## could assume 100m, as minimal distance between stations, represents 4th order selection (i.e foraging patch)
-## 500 m buffer is fairly standard, representing 3rd order selection (i.e. selecting habitat components in a home range), despite variance across species
-
-## Create an sf object using cam_locs_sf with 100m and 500m buffers around camera locations for later use in extracting fire history data around camera locations
-cams_100m_buffer <- st_buffer(cam_locs_sf, dist = 100)
-cams_500m_buffer <- st_buffer(cam_locs_sf, dist = 500)
-
-plot(cams_100m_buffer["study_area"]) # test plot 100m buffers around camera locations
 
 #### Load Fire History data ####
 ## Canada Fire History data between 1972-2024 from NRCan: https://cwfis.cfs.nrcan.gc.ca/datamart/metadata/nbac
@@ -216,7 +88,7 @@ hist(fires_100m_buffer$YEAR) # roughly normal distribution, with big spikes in l
 hist(fires_500m_buffer$YEAR) # similar distribution to 100m but with more fires overall (since larger buffer)
 hist(fires_100m_buffer$POLY_HA) # total area of fire polygons in hectares using Canada Albers Equal Area projection (pre-calculated by NRCan)
 hist(fires_500m_buffer$POLY_HA)
-hist(nwt_fires_boun$ADJ_HA) # adjusted area burned (see documentation for details)
+hist(nwt_fires_boun$ADJ_HA) # adjusted area burned (see documentation for details, and Skakun et al. 2021: https://cwfis.cfs.nrcan.gc.ca/downloads/nbac/NBAC_1972to2024_20250506_shp_metadata.pdf)
 
 plot(fires_100m_buffer["YEAR"]) # map of fire years within 100m buffer around camera locations
 plot(fires_500m_buffer["YEAR"]) # map of fire years within 500m buffer around camera locations
@@ -370,7 +242,7 @@ hist_fires_100 <- fires_100m_buffer %>%
   facet_wrap(~ study_area) +
   labs(title = "Distribution of Fire Years within 100m Buffer of Camera Locations",
        x = "Fire Year",
-       y = "Count of Fires") +
+       y = "Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -391,7 +263,7 @@ hist_fires_500 <- fires_500m_buffer %>%
   facet_wrap(~ study_area) +
   labs(title = "Distribution of Fire Years within 500m Buffer of Camera Locations",
        x = "Fire Year",
-       y = "Count of Fires") +
+       y = "Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -413,7 +285,7 @@ nwt_fire_hist_100 <- fires_100m_buffer %>%
   geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
   labs(title = "Distribution of Fire Years within 100m Buffer of Camera Locations - all study areas",
        x = "Fire Year",
-       y = "Count of Fires") +
+       y = "Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -433,7 +305,7 @@ nwt_fire_hist_500 <- fires_500m_buffer %>%
   geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
   labs(title = "Distribution of Fire Years within 500m Buffer of Camera Locations - all study areas",
        x = "Fire Year",
-       y = "Count of Fires") +
+       y = "Count of Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -489,7 +361,7 @@ fireage_500 <- fires_500m_buffer %>%
   facet_wrap(~ study_area) +
   labs(title = "Distribution of Fire Age within 500m Buffer of Camera Locations",
        x = "Fire Age",
-       y = "Count of Fires") +
+       y = "Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -509,7 +381,7 @@ fireage_all_500 <- fires_500m_buffer %>%
   geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
   labs(title = "Distribution of Fire Age within 500m Buffer of Camera Locations",
        x = "Fire Age",
-       y = "Count of Fires") +
+       y = "Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -525,17 +397,60 @@ ggsave("figures/fire_explore/fireages_500mbuffer_20260306.png", fireage_all_500,
 ## How many sites have more than 1 fire polygon within 500m?
 table(duplicated(fires_500m_buffer$location)) #78 sites have multiple fire polygons
 ## How many polygons are duplicated across sites (i.e. polygons that include multiple sites)
-table(duplicated(fires_500m_buffer$NFIREID)) #379 polygon IDs match another
+table(duplicated(fires_500m_buffer$NFIREID)) #379 polygon IDs match another (i.e., 379 sites are located within the same fire polygon as another site)
 
 length(unique(fires_500m_buffer$NFIREID)) # 48 unique fire polygons represented
 
+#### Fire Size ####
+## Can use ADJ_HA in fires_500m_buffer, but there will be duplicates because some fires cover multiple sites. But that's okay for this exploration
+hist(fires_500m_buffer$ADJ_HA) ## fire sizes follow a general poisson distribution, with many small fires and few large fires (outliers up to 800 000 ha) 
+
+## ggplot
+hist_fire_size <- fires_500m_buffer %>% 
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = ADJ_HA)) +
+  geom_histogram(binwidth = 10000, fill = "orange", color = "black") + ## Binned to 10,000 ha intervals
+  labs(title = "Distribution of Fire Sizes (for fires within 500m of sites)",
+       x = "Fire Size (HA)",
+       y = "Count of Stations") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16))
+
+win.graph()
+hist_fire_size
+
+## save
+ggsave("figures/fire_explore/hist_fire_size_500mbuffer_20260310.png", hist_fire_size, width = 12, height = 8, dpi = 300)
+
+## Fire size by study area
+hist_fire_size_sa <- fires_500m_buffer %>% 
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = ADJ_HA)) +
+  geom_histogram(binwidth = 10000, fill = "orange", color = "black") + ## Binned to 10,000 ha intervals
+  facet_wrap(~ study_area) +
+  labs(title = "Distribution of Fire Sizes by Study Area (for fires within 500m of sites)",
+       x = "Fire Size (HA)",
+       y = "Count of Stations") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16))
+
+win.graph()
+hist_fire_size_sa
+
+## save
+ggsave("figures/fire_explore/hist_fire_size_500mbuffer_studyarea_20260310.png", hist_fire_size_sa, width = 12, height = 8, dpi = 300)
+
 #### Is there a relationship between fire age and fire size?
 
-## Can use POLY_HA in fires_500m_buffer, but there will be duplicates because some fires cover multiple sites. But that's okay for this exploration
-hist(fires_500m_buffer$POLY_HA) ## fire sizes follow a general poisson distribution, with many small fires and few large fires (outliers up to 800 000 ha) 
 fire_age_size <- fires_500m_buffer %>% 
   st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = FireAge, y = POLY_HA)) +
+  ggplot(aes(x = FireAge, y = ADJ_HA)) +
   geom_point() +
   labs(title = "Relationship between Fire Age and Fire Size (for fires within 500m of sites)",
        x = "Fire Age",
@@ -554,11 +469,14 @@ fire_age_size
 fire_age_size <- fire_age_size + geom_smooth(method = "lm", se = TRUE, color = "purple")
 fire_age_size
 
+## save
+ggsave("figures/fire_explore/fire_age_size_relationship_500mbuffer_20260310.png", fire_age_size, width = 12, height = 8, dpi = 300)
+
 ## Assessing relationship between fire age and fire size with a linear model
 glimpse(fires_500m_buffer)
 fires_500m_buffer$location <- as.factor(fires_500m_buffer$location) ## convert location to factor for use as random effect in GLMs
-lm(POLY_HA ~ FireAge, data = fires_500m_buffer) %>% summary() ## Low R-squared (low correlation) but significant relationship
-glm(POLY_HA ~ FireAge, data = fires_500m_buffer, family = "poisson") %>% summary() ## Similar results with a GLM using a gamma distribution to account for skewed fire size data)
+lm(ADJ_HA ~ FireAge, data = fires_500m_buffer) %>% summary() ## Low R-squared (low correlation) but significant relationship
+glm(ADJ_HA ~ FireAge, data = fires_500m_buffer, family = "poisson") %>% summary() ## Similar results with a GLM using a gamma distribution to account for skewed fire size data)
 
 ## would ideally use a random effect for location, but it doesn't matter so much for the exploration. 
 
