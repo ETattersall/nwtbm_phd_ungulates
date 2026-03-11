@@ -50,7 +50,7 @@ cams_500m_buffer <- st_read("cams_500m_buffer.shp")
 ## Canada Fire History data between 1972-2024 from NRCan: https://cwfis.cfs.nrcan.gc.ca/datamart/metadata/nbac
 ## Also have NWT fire history data from GNWT website, but I think that only goes to 2023 (may be a more recent download?)
 ## Use NRCan data, since this is what Claudia also used
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/nrcan_nbac")
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/nrcan_nbac/NBAC_1972to2024_20250506_shp")
 fire_history <- st_read("NBAC_1972to2024_20250506.shp")
 head(fire_history)
 ## Check CRS
