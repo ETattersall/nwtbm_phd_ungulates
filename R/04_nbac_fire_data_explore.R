@@ -50,7 +50,7 @@ cams_500m_buffer <- st_read("cams_500m_buffer.shp")
 ## Canada Fire History data between 1972-2024 from NRCan: https://cwfis.cfs.nrcan.gc.ca/datamart/metadata/nbac
 ## Also have NWT fire history data from GNWT website, but I think that only goes to 2023 (may be a more recent download?)
 ## Use NRCan data, since this is what Claudia also used
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/nrcan_nbac/NBAC_1972to2024_20250506_shp")
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/nrcan_nbac")
 fire_history <- st_read("NBAC_1972to2024_20250506.shp")
 head(fire_history)
 ## Check CRS
@@ -64,6 +64,9 @@ fire_history <- st_transform(fire_history, crs = 3580)
 ## First filter fire_history for fires in NT (though this still includes fires in Nunavut prior to it becoming a separate territory in 1999)
 nwt_fires <- fire_history %>%
   filter(ADMIN_AREA == "NT") # filter for fires in NT
+
+## save NWT fire data as a separate shapefile for faster loading in future
+st_write(nwt_fires, "nwt_fires_1972to2024.shp")
 
 ## Remove fire_history from environment to save memory
 rm(fire_history)
@@ -394,6 +397,7 @@ fireage_all_500
 ## save
 ggsave("figures/fire_explore/fireages_500mbuffer_20260306.png", fireage_all_500, width = 12, height = 8, dpi = 300)
 
+
 ## How many sites have more than 1 fire polygon within 500m?
 table(duplicated(fires_500m_buffer$location)) #78 sites have multiple fire polygons
 ## How many polygons are duplicated across sites (i.e. polygons that include multiple sites)
@@ -521,3 +525,7 @@ gg_nwt_fires <- ggplot() +
   theme(legend.title= element_text(size = 16))
 
 gg_nwt_fires
+
+
+#### Fire Age categories by decade ####
+## Create fire age and fire size categories for nwt_fires, then extract at buffered camera locations
