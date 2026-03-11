@@ -53,6 +53,46 @@ sa_fires <- st_intersection(nwt_fires, sa_20k_buffer)
 
 plot(sa_fires["YEAR"])
 
+## Megafire years ##
+# Megafires are defined as >10 000 ha in size. Giga fires are defined as >100 000 ha in size.
+# Isolate Megafires or greater (using ADJ_HA column)
+sa_megafires <- sa_fires %>%
+  filter(ADJ_HA > 10000) %>%
+  mutate(size_group = case_when(
+    ADJ_HA >= 100000 ~ "Gigafire",
+    ADJ_HA >= 10000 & ADJ_HA < 100000 ~ "Megafire",
+    TRUE ~ NA_character_  # Default case if no match
+  ))
+
+plot(sa_megafires["YEAR"])
+
+hist(sa_megafires$YEAR)
+table(sa_megafires$size_group)
+
+## Create a bar plot of megafires and gigafires by year
+gg_sa_megafires <- ggplot(sa_megafires, aes(x = YEAR, fill = size_group)) +
+  geom_bar() +
+  facet_wrap(~ study_area) +
+  labs(title = "Number of Megafires and Gigafires by Year",
+       x = "Year",
+       y = "Count of Fires",
+       fill = "Fire Size") +
+  theme_classic() +
+  scale_fill_manual(values = c("Megafire" = "orange", "Gigafire" = "darkred")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+gg_sa_megafires
+## Save the plot
+ggsave("figures/fire_explore/Megafires_hist_bySA.png", gg_sa_megafires, width = 12, height = 8, dpi = 300)
+
+
+
+#### Calculating Fire Ages across entire study areas ####
 ## Create Year0 for sa_fires, corresponding to the first year of deployment for each study area
 sa_fires <- sa_fires %>%
   mutate(Year0 = case_when(
