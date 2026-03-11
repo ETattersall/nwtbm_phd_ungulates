@@ -191,11 +191,11 @@ getwd()
 setwd("data/study_area_spatial")
 list.files() ## want shapefiles of combined study areas, plus the Sambaa K'e winter road, which will have to be added
 
-## Load NWTBM_all_study_areas.shp
+## Load NWTBM_all_study_areas.shp (created in nwtbm_phd_general project - R/03_study_area_maps.R)
 sa_sf <- st_read("NWTBM_all_study_areas.shp")
 
 ## Load Sambaa K'e winter road shapefile (sambaake_winter_road_shp.shp)
-sk_wr_sf <- st_read("sambaake_winter_road_shp.shp")
+sk_wr_sf <- st_read("sambaake_winter_road_shp.shp") ## isolated in nwtbm_phd_general project - R/03b_ind_study_area_maps.R
 
 st_crs(sk_wr_sf) ## currently WGS 84 - need to transform to match sa_sf (NWT Lambert, 3580)
 sk_wr_sf <- st_transform(sk_wr_sf, crs = 3580)
