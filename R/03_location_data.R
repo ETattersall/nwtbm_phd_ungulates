@@ -1,6 +1,7 @@
 ####################################
 ## 03_location_data.R
 ## Combining location data from all study areas, converting to spatial data and creating buffers
+## Also adding Sambaa K'e winter road to study area shapefile and creating 20km buffers around study areas for spatial data extractions
 ## Started on Feb 13 2026
 ## Created by Erin Tattersall
 ####################################
@@ -68,7 +69,7 @@ cam_projects <- cam_projects %>% filter(project_id == "712" |
 
 setwd("data/wt_location_data")
 list.files()
-cam_loc_files <- list.files(pattern = "\\.csv$")
+cam_loc_files <- list.files(pattern = "\\.csv$") ## all projects csv already created - skip to reading this in (line 115)
 cam_loc_files
 
 # Read and bind all CSVs, adding a column for the source file
@@ -112,6 +113,8 @@ class(cam_locs) # data.table
 write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260224.csv", row.names = FALSE)
 table(cam_locs$study_area)
 
+## read in cam_locs from csv file (if already created)
+cam_locs <- read.csv("data/wt_location_data/all_projects_cam_locations_20260224.csv")
 
 ### Plot camera locations to check they look correct
 cam_locs_sf <- st_as_sf(cam_locs, coords = c("longitude", "latitude"), crs = 4326) # convert to sf object with WGS 84 CRS
@@ -181,3 +184,53 @@ plot(cams_100m_buffer["study_area"]) # test plot 100m buffers around camera loca
 ### Save cams_100m buffer and cams_500m_buffer as sf objects (shp files) for extracting spatial data around stations
 st_write(cams_100m_buffer, "data/wt_location_data/cams_100m_buffer.shp", delete_layer = TRUE)
 st_write(cams_500m_buffer, "data/wt_location_data/cams_500m_buffer.shp", delete_layer = TRUE)
+
+
+#### Study Area polygons and buffers ####
+getwd()
+setwd("data/study_area_spatial")
+list.files() ## want shapefiles of combined study areas, plus the Sambaa K'e winter road, which will have to be added
+
+## Load NWTBM_all_study_areas.shp
+sa_sf <- st_read("NWTBM_all_study_areas.shp")
+
+## Load Sambaa K'e winter road shapefile (sambaake_winter_road_shp.shp)
+sk_wr_sf <- st_read("sambaake_winter_road_shp.shp")
+
+st_crs(sk_wr_sf) ## currently WGS 84 - need to transform to match sa_sf (NWT Lambert, 3580)
+sk_wr_sf <- st_transform(sk_wr_sf, crs = 3580)
+
+## sk_wr_sf currently has two features (two segments of the winter road) - combine into one feature using st_union
+sk_wr_sf <- st_sf(st_union(sk_wr_sf)) #combines 2 features into one and keeps it as an sf object instead of sfc
+class(sk_wr_sf) ## sf
+
+## add study_area column to sk_wr_sf
+sk_wr_sf$study_area <- "SambaaK'e"
+
+colnames(sk_wr_sf) <- c("geometry", "study_area")
+
+## assign geometry column name to "geometry" in sk_wr_sf
+sk_wr_sf <- st_set_geometry(sk_wr_sf, "geometry")
+
+glimpse(sk_wr_sf)
+glimpse(sa_sf)
+
+
+
+## Add winter road to sa_sf
+sa_sf2 <- rbind(sa_sf, sk_wr_sf)
+
+
+## Remove Sambaa K'e polygon (3rd row) and keep Sambaa K'e winter road (7th row) in sa_sf2
+sa_sf2 <- sa_sf2[-3, ]
+
+plot(sa_sf2["study_area"]) # check that the combined study area shapefile looks correct with the winter road included and the Sambaa K'e polygon removed
+
+
+
+### Add 20km buffers to each study area (generous buffer for spatial data extractions)
+sa_sf2_buffer <- st_buffer(sa_sf2, dist = 20000)
+plot(sa_sf2_buffer["study_area"]) # check that the buffered study area shapefile looks correct
+
+### Save sa_sf2_buffer as shapefiles for later use in extracting spatial data around study areas
+st_write(sa_sf2_buffer, "NWTBM_all_study_areas_20km_buffers.shp", delete_layer = TRUE)
