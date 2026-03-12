@@ -133,6 +133,10 @@ ggsave("figures/ungulate_ind_detections_30min_20260115.jpeg", plot = ung_plot1, 
 cam_df <- bind_rows(cam_data, .id = "study_area")
 length(unique(cam_df$location)) ## 706
 
+glimpse(cam_df)
+summary(cam_df)
+table(cam_df$image_fov) ## 926 724 images classified as 'OOR', or (out of range)
+
 ## Create a site by species detection matrix for all sampled locations
 site_species_cams <- cam_df %>%
   distinct(study_area, location, species_common_name) %>% # get unique combinations of study area, location and species tags
