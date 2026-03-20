@@ -344,17 +344,18 @@ ggsave("figures/fire_explore/allSAs_hist_fires_500mbuffer_20260303.png", nwt_fir
 
 glimpse(fires_500m_buffer)
 
-## Create Year0 for fires_500m_buffer
+## Create Year0 for fires_500m_buffer(corresponding to LAST year of deployment)
 fires_500m_buffer <- fires_500m_buffer %>%
   mutate(Year0 = case_when(
-    str_detect(study_area, "Edéhzhíe") ~ "2021",
-    str_detect(study_area, "FortSmith") ~ "2023",
-    str_detect(study_area, "Gameti") ~ "2023",
-    str_detect(study_area, "NormanWells") ~ "2022",
-    str_detect(study_area, "SambaaK'e") ~ "2022",
-    str_detect(study_area, "ThaideneNëné") ~ "2021",
+    str_detect(study_area, "Edéhzhíe") ~ "2022",
+    str_detect(study_area, "FortSmith") ~ "2024",
+    str_detect(study_area, "Gameti") ~ "2024",
+    str_detect(study_area, "NormanWells") ~ "2024",
+    str_detect(study_area, "SambaaK'e") ~ "2023",
+    str_detect(study_area, "ThaideneNëné") ~ "2022",
     TRUE ~ NA_character_  # Default case if no match
   ))
+class(fires_500m_buffer$Year0)
 
 fires_500m_buffer$Year0 <- as.numeric(fires_500m_buffer$Year0)
 glimpse(fires_500m_buffer)
@@ -365,9 +366,9 @@ hist(fires_500m_buffer$FireAge)
 
 ## how many (and which ones) are negative values?
 neg.fire.age <- fires_500m_buffer[fires_500m_buffer$FireAge < 0, ]
-table(neg.fire.age$study_area) # 10 Edehzhie, 6 Sambaa K'e, 6 ThaideneNene
-## Can remove the Edehzhie and TDN ones (fire doesn't occur during deployment period)
-## Sambaa K'e fires occurred after retrieval (March 2023)
+table(neg.fire.age$study_area) # 10 Edehzhie, 6 ThaideneNene
+## Can remove these since fire doesn't occur during deployment period
+
 
 fires_500m_buffer <- fires_500m_buffer[!fires_500m_buffer$FireAge < 0, ]
 summary(fires_500m_buffer$FireAge)
@@ -378,8 +379,8 @@ fireage_500 <- fires_500m_buffer %>%
   ggplot(aes(x = FireAge)) +
   geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
   facet_wrap(~ study_area) +
-  labs(title = "Distribution of Fire Age within 500m Buffer of Camera Locations",
-       x = "Fire Age",
+  labs(title = "Time Since Fire by Study Area (500m buffer)",
+       x = "Time Since Fire",
        y = "Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
@@ -391,15 +392,15 @@ fireage_500 <- fires_500m_buffer %>%
 win.graph()
 fireage_500
 ## save
-ggsave("figures/fire_explore/fireages_byarea_500mbuffer_20260306.png", fireage_500, width = 12, height = 8, dpi = 300)
+ggsave("figures/fire_explore/fireages_byarea_500mbuffer_20260320.png", fireage_500, width = 12, height = 8, dpi = 300)
 
 ## Not faceted
 fireage_all_500 <- fires_500m_buffer %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
   ggplot(aes(x = FireAge)) +
   geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
-  labs(title = "Distribution of Fire Age within 500m Buffer of Camera Locations",
-       x = "Fire Age",
+  labs(title = "Time Since Fire (500m buffer)",
+       x = "Time Since Fire",
        y = "Count of Stations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
@@ -411,15 +412,45 @@ fireage_all_500 <- fires_500m_buffer %>%
 win.graph()
 fireage_all_500
 ## save
-ggsave("figures/fire_explore/fireages_500mbuffer_20260306.png", fireage_all_500, width = 12, height = 8, dpi = 300)
+ggsave("figures/fire_explore/fireages_500mbuffer_20260320.png", fireage_all_500, width = 12, height = 8, dpi = 300)
 
 
 ## How many sites have more than 1 fire polygon within 500m?
-table(duplicated(fires_500m_buffer$location)) #78 sites have multiple fire polygons
+table(duplicated(fires_500m_buffer$location)) #80 sites have multiple fire polygons
 ## How many polygons are duplicated across sites (i.e. polygons that include multiple sites)
-table(duplicated(fires_500m_buffer$NFIREID)) #379 polygon IDs match another (i.e., 379 sites are located within the same fire polygon as another site)
+table(duplicated(fires_500m_buffer$NFIREID)) #384 polygon IDs match another (i.e., 379 sites are located within the same fire polygon as another site)
 
 length(unique(fires_500m_buffer$NFIREID)) # 48 unique fire polygons represented
+
+
+## Create Year0 for sa_20km_fires (corresponding to LAST year of deployment)
+sa_20km_fires <- sa_20km_fires %>%
+  mutate(Year0 = case_when(
+    str_detect(study_area, "Edéhzhíe") ~ "2022",
+    str_detect(study_area, "FortSmith") ~ "2024",
+    str_detect(study_area, "Gameti") ~ "2024",
+    str_detect(study_area, "NormanWells") ~ "2024",
+    str_detect(study_area, "SambaaK'e") ~ "2023",
+    str_detect(study_area, "ThaideneNëné") ~ "2022",
+    TRUE ~ NA_character_  # Default case if no match
+  ))
+class(sa_20km_fires$Year0)
+
+sa_20km_fires$Year0 <- as.numeric(sa_20km_fires$Year0)
+glimpse(sa_20km_fires)
+
+sa_20km_fires$FireAge <- sa_20km_fires$Year0 - sa_20km_fires$YEAR
+summary(sa_20km_fires$FireAge)
+hist(sa_20km_fires$FireAge)
+
+## how many (and which ones) are negative values?
+neg.fire.age <- sa_20km_fires[sa_20km_fires$FireAge < 0, ]
+table(neg.fire.age$study_area) # 14 Edehzhie, 14 ThaideneNene, 1 Sambaa K'e
+## Can remove these since fire doesn't occur during deployment period
+
+
+sa_20km_fires <- sa_20km_fires[!sa_20km_fires$FireAge < 0, ]
+summary(sa_20km_fires$FireAge)
 
 #### Fire Size ####
 ## Can use ADJ_HA in fires_500m_buffer, but there will be duplicates because some fires cover multiple sites. But that's okay for this exploration
@@ -501,25 +532,6 @@ glm(ADJ_HA ~ FireAge, data = fires_500m_buffer, family = "poisson") %>% summary(
 ## would ideally use a random effect for location, but it doesn't matter so much for the exploration. 
 
 ### Mapping ####
-### Initial map of fires buffered to 100m around camera locations (no boundaries or basemaps)
-win.graph() # open separate graphics window
-gg_fire_100 <- ggplot() +
-  geom_sf(data = fires_100m_buffer, aes(color = YEAR), size = 1.5) + # fire polygons
-  scale_color_gradient(low = "yellow", high = "red") + # red gradient for more recent burns
-  labs(title = "Fire History (100m buffer), 1972 - 2024",
-       x = "Longitude",
-       y = "Latitude",
-       color = "Fire Year") +
-  theme(legend.position = "right") +
-  coord_sf(xlim = c(-1026000, 580000), ylim = c(8100000, 9360000), expand = FALSE) + # set limits to bounding box of NWT fire layer (plus a little extra buffer)
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16)) +
-  theme(legend.title= element_text(size = 16))
-
-gg_fire_100
 
 ### Map of all NWT fire history plus sensor locations (including 500m buffers for visibility)
 gg_nwt_fires <- ggplot() +
@@ -541,4 +553,70 @@ gg_nwt_fires <- ggplot() +
   theme(legend.title= element_text(size = 16))
 
 gg_nwt_fires
+
+
+### Faceted map of fire history for each study area
+
+## Create each map separately (in a list), then plot together using plot_grid() (cowplot package)
+
+## list of study areas
+glimpse(cam_locs_sf)
+study_areas <- unique(cam_locs_sf$study_area)
+
+## Create a function to make one plot per study area
+make_sa_plot <- function(sa) {
+  
+  # get bounding box for that study area (using sa_20km fires polygons)
+  sa_bbox <- sa_20km_fires %>%
+    dplyr::filter(study_area == sa) %>%
+    summarise() %>%
+    st_bbox()
+  
+  ggplot() +
+    geom_sf(data = sa_20km_fires %>% filter(study_area == sa),
+            aes(fill = FireAge), color = NA,
+            size = 0.5) +
+    
+    geom_sf(data = cam_locs_sf %>% filter(study_area == sa),
+            color = "black",
+            size = 2) +
+    
+    scale_fill_gradient(low = "red", high = "yellow", name = "Time Since Fire") +
+    
+    coord_sf(xlim = c(sa_bbox["xmin"], sa_bbox["xmax"]),
+             ylim = c(sa_bbox["ymin"], sa_bbox["ymax"]),
+             expand = FALSE) +
+    
+    labs(title = sa,
+         x = "Longitude",
+         y = "Latitude") +
+    
+    theme_classic() +
+    theme(
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+      legend.position = "right"
+    )
+}
+
+
+## Create list of ggplots
+plot_list <- lapply(study_areas, make_sa_plot)
+
+
+combined_plot <- plot_grid(plotlist = plot_list,
+                           ncol = 3)   # adjust columns as needed
+
+win.graph()
+combined_plot
+
+
+## Save the plot
+save_plot(
+  "figures/fire_explore/TimeSinceFire_bySA.jpeg",
+  combined_plot,
+  ncol = 3,
+  nrow = 2,
+  base_asp = 1.618,
+  dpi = 300
+)
 
