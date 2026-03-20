@@ -41,9 +41,16 @@ lapply(list.of.packages, require, character.only = TRUE)
 
 ## Read in in cam_locs_sf, cams_100m_buffer, and cams_500m_buffer from R/03_location_data.R
 setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/wt_location_data")
+list.files()
+
 cam_locs_sf <- st_read("all_projects_cam_locations_20260310.shp")
 cams_100m_buffer <- st_read("cams_100m_buffer.shp")
 cams_500m_buffer <- st_read("cams_500m_buffer.shp")
+
+## Also read in study area shapefile with 20km buffer (in study_area_spatial)
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/study_area_spatial")
+sa_20km <- st_read("NWTBM_all_study_areas_20km_buffers.shp")
+crs(sa_20km)
 
 
 #### Load Fire History data ####
@@ -68,6 +75,12 @@ nwt_fires <- fire_history %>%
 ## save NWT fire data as a separate shapefile for faster loading in future
 st_write(nwt_fires, "nwt_fires_1972to2024.shp")
 
+### Extract fire data for 20km buffers. Use full fire history because a tiny corner of Fort Smith buffer is in Alberta (one FS station is ~900m from border)
+sa_20km_fires <- st_intersection(fire_history, sa_20km)
+
+## save 20km buffered fire data for later use
+st_write(sa_20km_fires, "NBAC_fires_by_study_area_20kmbuffer.shp")
+
 ## Remove fire_history from environment to save memory
 rm(fire_history)
 
@@ -75,9 +88,9 @@ rm(fire_history)
 setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
 
 
-## Then extract fire for cam buffer areas
-fires_100m_buffer <- st_intersection(nwt_fires, cams_100m_buffer)
-fires_500m_buffer <- st_intersection(nwt_fires, cams_500m_buffer)
+## Then extract fire for cam buffer areas (using sa_20km_fires)
+fires_100m_buffer <- st_intersection(sa_20km_fires, cams_100m_buffer)
+fires_500m_buffer <- st_intersection(sa_20km_fires, cams_500m_buffer)
 
 
 crs(fires_100m_buffer) # check CRS of fire data within buffers
@@ -91,7 +104,7 @@ hist(fires_100m_buffer$YEAR) # roughly normal distribution, with big spikes in l
 hist(fires_500m_buffer$YEAR) # similar distribution to 100m but with more fires overall (since larger buffer)
 hist(fires_100m_buffer$POLY_HA) # total area of fire polygons in hectares using Canada Albers Equal Area projection (pre-calculated by NRCan)
 hist(fires_500m_buffer$POLY_HA)
-hist(nwt_fires_boun$ADJ_HA) # adjusted area burned (see documentation for details, and Skakun et al. 2021: https://cwfis.cfs.nrcan.gc.ca/downloads/nbac/NBAC_1972to2024_20250506_shp_metadata.pdf)
+hist(sa_20km_fires$ADJ_HA) # adjusted area burned (see documentation for details, and Skakun et al. 2021: https://cwfis.cfs.nrcan.gc.ca/downloads/nbac/NBAC_1972to2024_20250506_shp_metadata.pdf)
 
 plot(fires_100m_buffer["YEAR"]) # map of fire years within 100m buffer around camera locations
 plot(fires_500m_buffer["YEAR"]) # map of fire years within 500m buffer around camera locations
@@ -99,6 +112,9 @@ plot(fires_500m_buffer["YEAR"]) # map of fire years within 500m buffer around ca
 ## Not all sensor locations have fire history data within 100m or 500m buffers. Some locations have multiple fire polygons within the buffers
 length(unique(fires_100m_buffer$location)) # 336 locations have fire history data within 100m buffer
 length(unique(fires_500m_buffer$location)) # 360 locations have fire history data within 500m buffer
+
+
+
 
 #### Summary statistics ####
 
@@ -526,6 +542,3 @@ gg_nwt_fires <- ggplot() +
 
 gg_nwt_fires
 
-
-#### Fire Age categories by decade ####
-## Create fire age and fire size categories for nwt_fires, then extract at buffered camera locations
