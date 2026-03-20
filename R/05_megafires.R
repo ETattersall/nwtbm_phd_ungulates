@@ -192,6 +192,13 @@ combined_plot
 
 
 ## Save the plot
-ggsave("figures/fire_explore/Megafires_map_bySA.png", combined_plot, width = 12, height = 8, dpi = 300)
+save_plot(
+  "figures/fire_explore/Megafires_map_bySA.jpeg",
+  combined_plot,
+  ncol = 3,
+  nrow = 2,
+  base_asp = 1.618,
+  dpi = 300
+)
 
 
