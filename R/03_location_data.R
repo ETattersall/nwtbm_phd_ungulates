@@ -86,7 +86,6 @@ setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
 
 
 ### Add a column for study area
-### Add a column for study area
 cam_locs <- cam_locs %>%
   mutate(study_area = case_when(
     str_detect(source_file, "Edéhzhíe") ~ "Edéhzhíe",

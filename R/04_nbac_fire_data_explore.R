@@ -480,7 +480,7 @@ ggsave("figures/fire_explore/fire_age_size_relationship_500mbuffer_20260310.png"
 glimpse(fires_500m_buffer)
 fires_500m_buffer$location <- as.factor(fires_500m_buffer$location) ## convert location to factor for use as random effect in GLMs
 lm(ADJ_HA ~ FireAge, data = fires_500m_buffer) %>% summary() ## Low R-squared (low correlation) but significant relationship
-glm(ADJ_HA ~ FireAge, data = fires_500m_buffer, family = "poisson") %>% summary() ## Similar results with a GLM using a gamma distribution to account for skewed fire size data)
+glm(ADJ_HA ~ FireAge, data = fires_500m_buffer, family = "poisson") %>% summary() ## Similar results with a GLM using a poisson distribution to account for skewed fire size data)
 
 ## would ideally use a random effect for location, but it doesn't matter so much for the exploration. 
 
