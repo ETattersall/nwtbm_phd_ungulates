@@ -66,7 +66,7 @@ crs(fsev)
 win.graph()
 plot(fsev)
 
-## Convert sa_20km to terra object
+## Convert sa_20km to terra object so it can be used to crop fsev
 sa_20km_terra <- sa_20km %>% 
   st_transform(crs = st_crs(fsev)) %>% # match fsev projection
   vect()
@@ -83,22 +83,100 @@ writeRaster(fsev_sa_20km, "data/CA_Forest_Wildfire_dNBR_1985-2022/NWT_studyareas
 ### Map fire severity in study areas
 gg_sa_fsev <- ggplot() +
   geom_spatraster(data= fsev_sa_20km, use_coltab = TRUE) +
-  geom_sf(data = sa_sf, fill = NA, color = "black") +
+  geom_sf(data = sa_sf, fill = NA, color = "black", linewidth = 1) +
   geom_sf(data = cam_locs_sf, size = 2, color = "black") +
-  scale_fill_gradient(na.value = "transparent") +  # Make NA values blank
+  scale_fill_gradient(low = "white", high = "red",na.value = "transparent") +  # Make NA values blank
   coord_sf() +
-  theme_minimal() +
-  theme(
-    axis.text = element_blank(),      # Remove axis text
-    axis.title = element_blank(),     # Remove axis titles
-    axis.ticks = element_blank(),     # Remove axis ticks
-    panel.grid = element_blank()      # Remove gridlines
-  ) +
   labs(title = "Fire Severity in NWTBM Study Areas", 
        x = "Longitude",
        y = "Latitude",
-       fill = "Fire Severity (dNBR)"
-  )
+       fill = "Fire Severity (dNBR)") +
+  theme_classic() +
+    # increase size of title text, axis text, and facet titles
+    theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+    theme(axis.title.x = element_text(size = 16)) +
+    theme(axis.title.y = element_text(size = 16)) +
+    theme(axis.text = element_text(size = 12)) +
+    theme(legend.title= element_text(size = 16))
 
 win.graph()
 gg_sa_fsev
+
+## Save plot
+ggsave("figures/fire_explore/ntems_fireseverity_1985-2022_studyareas.jpeg", gg_sa_fsev, width = 12, height = 8, dpi = 300)
+
+###### Summary statistics ####
+
+## summaries of fire severity within each study area, around each camera location (500m buffer)
+
+
+# Read in current 500m buffer layer as sf object
+cams_500m_buffer <- st_read("data/wt_location_data/cams_500m_buffer.shp")
+
+glimpse(cams_500m_buffer) ## rename columns (same as cams_locs_sf)
+colnames(cams_500m_buffer) <- c("location", "buffer_m", "location_visibility", "true_coordinates", "location_comments", "internal_wildtrax_id", "study_area", "geometry")
+
+### function to rasterize each buffered camera location and calculate average fire severity within that buffer
+calc_fsev <- function(location_id) { # a character vector of all camera locations
+  
+  # 1) Get the buffer for a specific location
+  buf <- cams_500m_buffer %>%
+    filter(location == location_id)
+  
+  # Safety check: if no buffer found
+  if (nrow(buf) == 0) {
+    stop(paste("No buffer found for location:", location_id))
+  }
+  
+  # 2) Reproject buffer to match fire severity CRS
+  buf_reproj <- st_transform(buf, crs(fsev_sa_20km))
+  
+  # Convert sf → terra SpatVector (terra requires SpatVector)
+  buf_vect <- vect(buf_reproj)
+  
+  # 3) Extract mean fire severity data from each buffer polygon
+  mean_fsev <- extract(fsev_sa_20km, # specifies SpatRaster to be extracted
+                  buf_reproj, # specifies SpatVector with polygons to use for extraction
+                  fun = mean)[[2]] # function to summarize extracted data by calculating mean by polygon, then selecting the 2nd column (containing severity data)
+  
+  # 4) Return tibble of location + average fire severity
+  tibble(
+    location = location_id,
+    mean_fsev = mean_fsev
+  )
+}
+
+
+## create character vector of camera location names
+cam_locs_ids <- unique(cams_500m_buffer$location)
+
+fsev_cams_500m <- calc_fsev(cam_locs_ids)
+
+glimpse(fsev_cams_500m)
+summary(fsev_cams_500m$mean_fsev) ## IT WORKED!!
+
+hist(fsev_cams_500m$mean_fsev)
+
+
+
+## testing ###
+
+# reproject cams_500m_buff to match fsev, convert to SpatVector, 
+vcams_500 <- cams_500m_buffer %>% 
+  st_transform(crs(fsev_sa_20km)) %>% 
+  vect()
+  
+glimpse(vcams_500)
+plot(vcams_500)
+
+## Extract fsev_sa_20km to vcams_500
+fsev_500 <- extract(fsev_sa_20km, vcams_500, fun = mean)[[2]]
+glimpse(fsev_500)
+summary(fsev_500)
+
+win.graph()
+plot(fsev_500)
+
+
+
+
