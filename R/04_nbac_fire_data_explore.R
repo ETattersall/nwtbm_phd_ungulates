@@ -47,7 +47,7 @@ cam_locs_sf <- st_read("all_projects_cam_locations_20260310.shp")
 cams_100m_buffer <- st_read("cams_100m_buffer.shp")
 cams_500m_buffer <- st_read("cams_500m_buffer.shp")
 
-## Also read in study area shapefile with 20km buffer (in study_area_spatial)
+## Also read in study area shapefiles - both regular and with 20km buffer (in study_area_spatial)
 setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/study_area_spatial")
 sa_20km <- st_read("NWTBM_all_study_areas_20km_buffers.shp")
 crs(sa_20km)
@@ -86,6 +86,8 @@ rm(fire_history)
 
 ## return to base directory
 setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
+
+
 
 
 ## Then extract fire for cam buffer areas (using sa_20km_fires)
