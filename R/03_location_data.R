@@ -306,7 +306,7 @@ sa_areas <- left_join(sa_areas, sites_sa, by = "study_area")
 
 
 ## save areas as csv to add to with other summaries
-write.csv(sa_areas, "study_area_summaries.csv")
+write.csv(sa_areas, "data/study_area_summaries.csv")
 
 
 ### Add 20km buffers to each study area (generous buffer for spatial data extractions)
