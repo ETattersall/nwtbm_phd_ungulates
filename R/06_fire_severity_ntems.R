@@ -66,6 +66,8 @@ crs(fsev)
 win.graph()
 plot(fsev)
 
+summary(fsev) ## values range from 0 - 1.65
+
 ## Convert sa_20km to terra object so it can be used to crop fsev
 sa_20km_terra <- sa_20km %>% 
   st_transform(crs = st_crs(fsev)) %>% # match fsev projection
@@ -75,6 +77,10 @@ sa_20km_terra # SpatVector of projection Lambert_Conformal_Conic_2SP
 ## Crop fsev to 20km SA buffers
 fsev_sa_20km <- fsev %>% 
   crop(sa_20km_terra)
+
+summary(fsev_sa_20km)
+plot(fsev_sa_20km) ## values range from 0 - 1.52
+
 
 ## save study area fire severity data as raster
 writeRaster(fsev_sa_20km, "data/CA_Forest_Wildfire_dNBR_1985-2022/NWT_studyareas_20km_wildfire_dNBR_1985-2022.tif")
@@ -172,11 +178,10 @@ plot(vcams_500)
 ## Extract fsev_sa_20km to vcams_500
 fsev_500 <- extract(fsev_sa_20km, vcams_500, fun = mean)[[2]]
 glimpse(fsev_500)
-summary(fsev_500)
+summary(fsev_500) # values range from 0 - 0.995
 
 win.graph()
 plot(fsev_500)
-
 
 
 
