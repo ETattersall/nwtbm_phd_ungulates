@@ -212,12 +212,22 @@ colnames(sk_wr_sf) <- c("geometry", "study_area")
 sk_wr_sf <- st_set_geometry(sk_wr_sf, "geometry")
 
 glimpse(sk_wr_sf)
+st_length(sk_wr_sf) ## 96.166 km long
+
 glimpse(sa_sf)
 
+plot(sa_sf)
+
+
+
+## Sambaa K'e winter road is a multi-linestring, since it is a linear feature. To turn it into a polygon, add a buffer of 50m to approximate the area surveyed
+sk_wr_sf_poly <- st_buffer(sk_wr_sf, dist = 50)
+glimpse(sk_wr_sf_poly)
+st_area(sk_wr_sf_poly) ## 9.6 sq.km
 
 
 ## Add winter road to sa_sf
-sa_sf2 <- rbind(sa_sf, sk_wr_sf)
+sa_sf2 <- rbind(sa_sf, sk_wr_sf_poly)
 
 
 ## Remove Sambaa K'e polygon (3rd row) and keep Sambaa K'e winter road (7th row) in sa_sf2
@@ -226,6 +236,18 @@ sa_sf2 <- sa_sf2[-3, ]
 plot(sa_sf2["study_area"]) # check that the combined study area shapefile looks correct with the winter road included and the Sambaa K'e polygon removed
 
 
+## What is the total area of each study area? Given in m^2 - convert to km^2 (divide by 1 million) and convert to numeric
+sa_areas <- cbind.data.frame(
+              sa_sf2$study_area,
+              as.numeric(st_area(sa_sf2)/1000000))
+class(sa_areas[ ,2]) 
+sa_areas[2]
+colnames(sa_areas) <- c("study_area","area_sqkm") 
+colnames(sa_areas)
+
+## save areas as csv to add to with other summaries
+write.csv(sa_areas, "study_area_summaries.csv")
+
 
 ### Add 20km buffers to each study area (generous buffer for spatial data extractions)
 sa_sf2_buffer <- st_buffer(sa_sf2, dist = 20000)
@@ -233,3 +255,4 @@ plot(sa_sf2_buffer["study_area"]) # check that the buffered study area shapefile
 
 ### Save sa_sf2_buffer as shapefiles for later use in extracting spatial data around study areas
 st_write(sa_sf2_buffer, "NWTBM_all_study_areas_20km_buffers.shp", delete_layer = TRUE)
+
