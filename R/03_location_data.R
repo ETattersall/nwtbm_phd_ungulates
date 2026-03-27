@@ -67,10 +67,11 @@ cam_projects <- cam_projects %>% filter(project_id == "712" |
 #                                sensor_id = "CAM",
 #                                reports = "location")
 
-setwd("data/wt_location_data")
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/wt_location_data")
 list.files()
 cam_loc_files <- list.files(pattern = "\\.csv$") ## all projects csv already created - skip to reading this in (line 115)
-cam_loc_files
+cam_loc_files <- cam_loc_files[2:7] ## removing .csv for all projects (because this needs to be overwritten)
+
 
 # Read and bind all CSVs, adding a column for the source file
 cam_locs <- rbindlist(lapply(cam_loc_files, function(file) {
@@ -106,14 +107,66 @@ table(is.na(cam_locs$latitude))
 table(is.na(cam_locs$longitude)) ## Confirmed no NAs in lat/long
 table(is.na(cam_locs$study_area)) # no NAs in study area column either, so all cameras were successfully assigned to a study area
 
-class(cam_locs) # data.table
+class(cam_locs) # data.table, data.frame
+
+## Need to add a site column containing the ID for each site, or sensor cluster. This is relevant to all areas but Sambaa K'e (which will just be the station, or location)
+
+## First, need to clean up discrepancies in location names for Fort Smith and Gameti
+# Fort Smith - BMS-TLU-126-099 should be TLU-126-099
+cam_locs$location[cam_locs$location == "BMS-TLU-126-099"] <- "TLU-126-099"
+
+# Remove last suffix from stations with SRL-308, 310, and 316 (FSMC sites), since third suffix already makes them unique (and including it mixes up site identification code below)
+# Even though these are ID'd as clustered sites, they don't adhere to the same dice pattern as other sites. Not sure if they should be kept as sites or treated as independent stations - keeping as clustered sites for now
+# Note also that the station coordinates in site 308 are incorrect in the WildTrax ARU DATA (on wrong side of the river)
+# Identify FortSmith rows with exactly 3 hyphens (i.e., 4 parts)
+fsmc_sites <- cam_locs$study_area == "FortSmith" &
+  stringr::str_count(cam_locs$location, "-") == 3
+
+# Drop the last hyphen-separated part ONLY for those rows
+cam_locs$location[fsmc_sites] <-
+  sub("-[^-]+$", "", cam_locs$location[fsmc_sites])
+
+### Gameti - Gameti station names seem to be all mixed up - 6 stations seem to be clustered in the wrong site, but also camera station names aren't aligning with ARU station names or those on the google drive
+## For now, just fix BMS-KLP-049-01 (even though I think this should be KLP-047-01 - see Gameti_station_site_mixups.csv)
+cam_locs$location[cam_locs$location == "BMS-KLP-049-01"] <- "KLP-049-01"
+
+
+## Now add site column, where sites = everything but last suffix of location names
+cam_locs <- cam_locs %>% 
+  mutate(site = if_else(
+         study_area == "SambaaK'e", location, # if study_area is Sambaa K'e, return location ID, otherwise
+         gsub(pattern = "-(?:[^-]+)(?=\\s*,|$)", # locate the last hyphen-separated part of each location ID
+              "", # remove the last hyphen-separated part (i.e., replace it with nothing)
+              location, # column to look for matches
+              perl = TRUE) ## uses perl-compatible regex strings
+         ))
+table(is.na(cam_locs$site)) # no NAs
+glimpse(cam_locs)
+
+## Re-order columns so study_area and site are first
+cam_locs <- cam_locs %>% 
+  select(study_area, site, location, latitude, longitude, buffer_m, location_visibility, true_coordinates, location_comments, internal_wildtrax_id)
+
+length(unique(cam_locs$site)) ## 167 unique sites across all study areas
+
+sites_sa <- cam_locs %>% 
+  group_by(study_area) %>% 
+  summarise(
+    n_sites = n_distinct(site),
+    n_stations = n_distinct(location),
+    .groups = "drop"
+  )
+
+glimpse(cam_locs)
 
 ### Save cam_locs as csv file
-write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260224.csv", row.names = FALSE)
+write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260327.csv", row.names = FALSE)
 table(cam_locs$study_area)
 
+#### Updated to here on March 27 2026
+
 ## read in cam_locs from csv file (if already created)
-cam_locs <- read.csv("data/wt_location_data/all_projects_cam_locations_20260224.csv")
+# cam_locs <- read.csv("data/wt_location_data/all_projects_cam_locations_20260327.csv")
 
 ### Plot camera locations to check they look correct
 cam_locs_sf <- st_as_sf(cam_locs, coords = c("longitude", "latitude"), crs = 4326) # convert to sf object with WGS 84 CRS
@@ -196,6 +249,9 @@ sa_sf <- st_read("NWTBM_all_study_areas.shp")
 ## Load Sambaa K'e winter road shapefile (sambaake_winter_road_shp.shp)
 sk_wr_sf <- st_read("sambaake_winter_road_shp.shp") ## isolated in nwtbm_phd_general project - R/03b_ind_study_area_maps.R
 
+#return to base directory
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
+
 st_crs(sk_wr_sf) ## currently WGS 84 - need to transform to match sa_sf (NWT Lambert, 3580)
 sk_wr_sf <- st_transform(sk_wr_sf, crs = 3580)
 
@@ -245,6 +301,10 @@ sa_areas[2]
 colnames(sa_areas) <- c("study_area","area_sqkm") 
 colnames(sa_areas)
 
+## Add sites_sa (number of sites and stations per sa) to sa_areas
+sa_areas <- left_join(sa_areas, sites_sa, by = "study_area")
+
+
 ## save areas as csv to add to with other summaries
 write.csv(sa_areas, "study_area_summaries.csv")
 
@@ -254,5 +314,5 @@ sa_sf2_buffer <- st_buffer(sa_sf2, dist = 20000)
 plot(sa_sf2_buffer["study_area"]) # check that the buffered study area shapefile looks correct
 
 ### Save sa_sf2_buffer as shapefiles for later use in extracting spatial data around study areas
-st_write(sa_sf2_buffer, "NWTBM_all_study_areas_20km_buffers.shp", delete_layer = TRUE)
+st_write(sa_sf2_buffer, "data/study_area_spatial/NWTBM_all_study_areas_20km_buffers.shp", delete_layer = TRUE)
 
