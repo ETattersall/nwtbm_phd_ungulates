@@ -127,7 +127,7 @@ cam_locs$location[fsmc_sites] <-
   sub("-[^-]+$", "", cam_locs$location[fsmc_sites])
 
 ### Gameti - Gameti station names seem to be all mixed up - 6 stations seem to be clustered in the wrong site, but also camera station names aren't aligning with ARU station names or those on the google drive
-## For now, just fix BMS-KLP-049-01 (even though I think this should be KLP-047-01 - see Gameti_station_site_mixups.csv)
+## For now, just fix BMS-KLP-049-01 (even though I think this should be KLP-047-01 - see Gameti_station_site_mixups.csv) so there are the correct number of sites
 cam_locs$location[cam_locs$location == "BMS-KLP-049-01"] <- "KLP-049-01"
 
 
@@ -291,6 +291,8 @@ sa_sf2 <- sa_sf2[-3, ]
 
 plot(sa_sf2["study_area"]) # check that the combined study area shapefile looks correct with the winter road included and the Sambaa K'e polygon removed
 
+### save new shapefile for study areas with only sambaa ke winter road polygon
+st_write(sa_sf2, "data/study_area_spatial/NWTBM_all_study_area_polygons.shp", delete_layer = TRUE)
 
 ## What is the total area of each study area? Given in m^2 - convert to km^2 (divide by 1 million) and convert to numeric
 sa_areas <- cbind.data.frame(
