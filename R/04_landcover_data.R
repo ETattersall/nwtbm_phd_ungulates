@@ -256,7 +256,7 @@ save_plot(
 
 ######### Calculating landcover proportions per study area ####
 
-## creates a df
+## creates a df of proportions of each landcover class per study area
 landcover_summary <- map2(
   lcc_sa,
   seq_along(lcc_sa), # generates numbers 1-6 to index the list
@@ -264,7 +264,8 @@ landcover_summary <- map2(
     rename(landcover_class = value, n_pixels = count) %>% # renaming columns intuitively
   mutate(study_area = study_area[.y],  # adding study area names from the 'study_area' list to each df
          area_ha = n_pixels * res(.x)[1] * res(.x)[2] / 10000, # calc area by multiplying the dimensions of each study area (res rows and columns) by n_pixels, dividing by 10 000 for ha
-         prop = n_pixels / sum(n_pixels))   
+         prop = n_pixels / sum(n_pixels)) %>% 
+    arrange(desc(prop)) ## re-arrange dfs so prop is in descending order
   )
 
 ## Also adding sa names as df names for added clarity
@@ -272,6 +273,29 @@ names(landcover_summary) <- study_area
 
 landcover_summary[[3]]
 sum(landcover_summary[[3]]$prop) # adds to 1, as it should!
+
+## Re-format for tidy tables
+landcover_summary <- map2(
+  landcover_summary,
+  seq_along(lcc_sa),
+  ~ mutate(.x,
+           area_ha = round(area_ha, 0), # round area to nearest integer
+           prop = scales::percent(prop, accuracy = 0.1)) %>% # convert prop to percent
+    dplyr::select("Landcover" = landcover_class, "Number of Pixels" = n_pixels, 
+                  "Hectares" = area_ha, "Overall Proportion" = prop) %>%
+    kbl(caption = paste(study_area[.y], "Landcover Class Summary from Original Classification", sep = " ")) %>%
+    kable_styling(full_width = FALSE, position = "left")
+)
+
+class(landcover_summary[[2]])
+
+landcover_summary[[2]]
+
+## save landcover summaries as an RDS list (still need to export as tables)
+saveRDS(landcover_summary, "data/LCC_2020/LCC_proportionsummaries_by_studyarea.RDS")
+
+
+
 
 #### Lumping Landcover classes ####
 ## are all landcover classes represented?
@@ -313,11 +337,55 @@ coltab_lumped <- coltab %>%
 
 ## Apply levels and colors to list of lcc data by area
 summary(lcc_sa_20[[1]])
+## 20km buffered areas
 lcc_sa_20_lumped <- lapply(lcc_sa_20, function(r) {
   levels(r)  <- cats_lumped
   coltab(r)  <- coltab_lumped
   r
 })
 
+## Study areas with no buffer for statistical summaries
+lcc_sa_lumped <- lapply(lcc_sa, function(r) {
+  levels(r)  <- cats_lumped
+  coltab(r)  <- coltab_lumped
+  r
+})
 
+summary(lcc_sa_lumped[[2]])
 
+### Proportions of lumped landcover classes
+landcover_summary_lumped <- map2(
+  lcc_sa_lumped,
+  seq_along(lcc_sa_lumped), # generates numbers 1-6 to index the list
+  ~ freq(.x) %>% # returns total number of pixels (count) per category (value)
+    rename(landcover_class = value, n_pixels = count) %>% # renaming columns intuitively
+    group_by(landcover_class) %>% # group same classes together
+    summarise(n_pixels = sum(n_pixels), .groups = "drop") %>% ## sum together duplicates
+    mutate(study_area = study_area[.y],  # adding study area names from the 'study_area' list to each df
+           area_ha = n_pixels * res(.x)[1] * res(.x)[2] / 10000, # calc area by multiplying the dimensions of each study area (res rows and columns) by n_pixels, dividing by 10 000 for ha
+           prop = n_pixels / sum(n_pixels)) %>% 
+    arrange(desc(prop)) ## re-arrange dfs so prop is in descending order
+)
+
+## Also adding sa names as df names for added clarity
+names(landcover_summary_lumped) <- study_area
+
+## Re-format for tidy tables
+landcover_summary_lumped <- map2(
+  landcover_summary_lumped,
+  seq_along(lcc_sa),
+  ~ mutate(.x,
+           area_ha = round(area_ha, 0), # round area to nearest integer
+           prop = scales::percent(prop, accuracy = 0.1)) %>% # convert prop to percent
+    dplyr::select("Landcover" = landcover_class, "Number of Pixels" = n_pixels, 
+                  "Hectares" = area_ha, "Overall Proportion" = prop) %>%
+    kbl(caption = paste(study_area[.y], "Landcover Class Summary from Original Classification", sep = " ")) %>%
+    kable_styling(full_width = FALSE, position = "left")
+)
+
+landcover_summary_lumped[[3]]
+
+## save lumped landcover summaries
+saveRDS(landcover_summary_lumped, "data/LCC_2020/LCC_lumped_proportionsummaries_by_studyarea.RDS")
+
+study_area[3]
