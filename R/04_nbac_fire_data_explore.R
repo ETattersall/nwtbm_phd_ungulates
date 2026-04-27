@@ -183,6 +183,32 @@ sa_fire_stats <- sa_fire_stats %>% arrange(desc(prop_burned))
 ### Save summary stats
 write.csv(sa_fire_stats,"figures/fire_explore/fire_stats_by_study_area.csv")
 
+## Bar plot of proportion burned by study area
+glimpse(sa_fire_stats)
+
+## convert prop_burned to numeric
+sa_fire_stats$prop_burned <- as.numeric(sa_fire_stats$prop_burned)
+glimpse(sa_fire_stats)
+
+bar_burned <- sa_fire_stats %>%
+  ggplot(aes(x = study_area, y = prop_burned)) +
+  geom_bar(stat = "identity", fill = "orange", color = "black") +
+  labs(title = "Proportion of Burned Area by Study Area",
+       x = "Study Area",
+       y = "Proportion of Burned Area") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 16))
+
+win.graph()
+bar_burned
+## save
+ggsave("figures/fire_explore/propburned_by_study_area_202604027.png", bar_burned, width = 12, height = 8, dpi = 300)
+
+
 ## Faceted plot of Burn Age by Study Area (20km buffer)
 fireage_sa <- sa_20km_fires %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
@@ -324,6 +350,7 @@ ggsave("figures/fire_explore/fire_age_size_relationship_bystudyarea_202604027.pn
 lm(ADJ_HA ~ FireAge, data = sa_20km_fires) %>% summary() ## Low R-squared and non-significant relationship
 
 
+
 ##### Fire data buffered by station ####
 
 ## Note (Apr 27 2026): all the station-specific data needs to be extracted again once station coordinates have been fixed in nwtbm_phd_general project (and then converted to spatial data in 03_location_data)
@@ -370,24 +397,7 @@ plot(fires_500m_buffer["YEAR"]) # map of fire years within 500m buffer around ca
 length(unique(fires_100m_buffer$location)) # 336 locations have fire history data within 100m buffer
 length(unique(fires_500m_buffer$location)) # 360 locations have fire history data within 500m buffer
 
-<<<<<<< HEAD
-=======
 
-
-
-#### Summary statistics ####
-
-# ## Proportion burned/unburned within each study area - not done yet. Make sure sa_poly shapefile includes SK winter road as polygon!!
-# glimpse(sa_fires_nobuffer)
-# 
-# 
-# pburn_sa <- sa_fires_nobuffer %>% 
-#   group_by(study_area) %>% ## group all polygons by study area
-#   summarise(geometry = st_union(geometry)) %>%  # combine all fire polygons within same study area
-#   mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
-#   st_drop_geometry() # drop geometry for easier joining
-
->>>>>>> 0dc4e6fcf01eeddf2207a0c70ece3fa85b5355e6
 ## What is the proportion of burned/unburned area around camera locations? Stick to 500m buffer for simplicity
 # For 500m around each camera location, calculate total area of fire polygons (in hectares) and divide by total area of 500m buffer (in m^2) to get proportion of burned area within 500m buffer
 # total area of 500m buffer = pi *(500^2) m^2 = 785398.16 m^2
