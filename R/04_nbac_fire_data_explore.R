@@ -39,6 +39,25 @@ new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"
 if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only = TRUE)
 
+<<<<<<< HEAD
+=======
+## Read in in cam_locs_sf, cams_100m_buffer, and cams_500m_buffer from R/03_location_data.R
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/wt_location_data")
+list.files()
+
+cam_locs_sf <- st_read("all_projects_cam_locations_20260310.shp")
+cams_100m_buffer <- st_read("cams_100m_buffer.shp")
+cams_500m_buffer <- st_read("cams_500m_buffer.shp")
+
+## Also read in study area shapefiles - both regular and with 20km buffer (in study_area_spatial)
+setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/study_area_spatial")
+list.files()
+sa_poly <- st_read("NWTBM_all_study_areas.shp")
+sa_20km <- st_read("NWTBM_all_study_areas_20km_buffers.shp")
+crs(sa_poly)
+crs(sa_20km) # same projection
+
+>>>>>>> 0dc4e6fcf01eeddf2207a0c70ece3fa85b5355e6
 
 #### Load Fire History data ####
 ## Canada Fire History data between 1972-2024 from NRCan: https://cwfis.cfs.nrcan.gc.ca/datamart/metadata/nbac
@@ -73,6 +92,12 @@ st_write(sa_20km_fires, "NBAC_fires_by_study_area_20kmbuffer.shp", append = FALS
 sa_poly$area_m2 <- st_area(sa_poly)
 
 
+
+# ##### Extract fire data for study areas without buffers - not done yet ###
+# ## First calculate total area of study areas (will be needed later)
+# sa_poly$area_m2 <- st_area(sa_poly)
+# 
+# sa_fires_nobuffer <- st_intersection(sa_20km_fires, sa_poly)
 
 ## Remove fire_history from environment to save memory
 rm(fire_history)
@@ -345,6 +370,24 @@ plot(fires_500m_buffer["YEAR"]) # map of fire years within 500m buffer around ca
 length(unique(fires_100m_buffer$location)) # 336 locations have fire history data within 100m buffer
 length(unique(fires_500m_buffer$location)) # 360 locations have fire history data within 500m buffer
 
+<<<<<<< HEAD
+=======
+
+
+
+#### Summary statistics ####
+
+# ## Proportion burned/unburned within each study area - not done yet. Make sure sa_poly shapefile includes SK winter road as polygon!!
+# glimpse(sa_fires_nobuffer)
+# 
+# 
+# pburn_sa <- sa_fires_nobuffer %>% 
+#   group_by(study_area) %>% ## group all polygons by study area
+#   summarise(geometry = st_union(geometry)) %>%  # combine all fire polygons within same study area
+#   mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
+#   st_drop_geometry() # drop geometry for easier joining
+
+>>>>>>> 0dc4e6fcf01eeddf2207a0c70ece3fa85b5355e6
 ## What is the proportion of burned/unburned area around camera locations? Stick to 500m buffer for simplicity
 # For 500m around each camera location, calculate total area of fire polygons (in hectares) and divide by total area of 500m buffer (in m^2) to get proportion of burned area within 500m buffer
 # total area of 500m buffer = pi *(500^2) m^2 = 785398.16 m^2
