@@ -11,8 +11,7 @@
 #### Environment set up ####
 ## Load required packages (should already be installed)
 
-list.of.packages <- c("wildrtrax",
-                      "sf",
+list.of.packages <- c("sf",
                       "lwgeom",
                       "data.table",
                       "tidyverse",
@@ -43,109 +42,19 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only = TRUE)
 
 
-#### Load in camera locations from WildTrax ####
-## Authenticate into WildTrax. Access local script for WT_USERNAME and WT_PASSWORD (wildtrax_login.R - not shared on GitHub)
-source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME and WTPASSWORD
-wt_auth()
-
-
-## Get project information for my WildTrax projects
-cam_projects <- wt_get_projects("CAM")
-glimpse(cam_projects) ## lists all the projects I have access to - including public projects I'm not involved in
-## Filter to my target projects only, using project IDs: 712 (Thaidene Nene), 2183 (Fort Smith), 2102 (Norman Wells), 1906 (Sambaa K'e), 2935 (Gameti), 1465 (Edehzhie)
-cam_projects <- cam_projects %>% filter(project_id == "712" |
-                                          project_id == "2183" |
-                                          project_id == "2102" |
-                                          project_id == "1906" |
-                                          project_id == "2935" |
-                                          project_id == "1465")
-
-
-## Get sensor locations for each project ##
-# not working currently - use manual downloads (also not included in RDS list of main reports - need to download location reports individually)
-# cam_locs <- wt_download_report(project_id = cam_projects$project_id,
-#                                sensor_id = "CAM",
-#                                reports = "location")
-
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/wt_location_data")
-list.files()
-cam_loc_files <- list.files(pattern = "\\.csv$") ## all projects csv already created - skip to reading this in (line 115)
-cam_loc_files <- cam_loc_files[2:7] ## removing .csv for all projects (because this needs to be overwritten)
-
-
-# Read and bind all CSVs, adding a column for the source file
-cam_locs <- rbindlist(lapply(cam_loc_files, function(file) {
-  dt <- fread(file)
-  dt[, source_file := basename(file)]
-  return(dt)
-}))
-
-summary(cam_locs) ## No NAs in lat/long columns
-
-#return to base directory
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates")
-
-
-### Add a column for study area
-cam_locs <- cam_locs %>%
-  mutate(study_area = case_when(
-    str_detect(source_file, "Edéhzhíe") ~ "Edéhzhíe",
-    str_detect(source_file, "FortSmith") ~ "FortSmith",
-    str_detect(source_file, "Gameti") ~ "Gameti",
-    str_detect(source_file, "NormanWells") ~ "NormanWells",
-    str_detect(source_file, "SambaaK'e") ~ "SambaaK'e",
-    str_detect(source_file, "ThaideneNëné") ~ "ThaideneNëné",
-    TRUE ~ NA_character_  # Default case if no match
-  ))
-
-## Remove source_file column
-cam_locs <- cam_locs %>%
-  select(-source_file)
-
+#### Load in camera locations ####
+## Location names and coordinates were aggregated and checked in nwtbm_phd_general/02_merge_station_locations.R
+cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
 glimpse(cam_locs)
-table(is.na(cam_locs$latitude))
-table(is.na(cam_locs$longitude)) ## Confirmed no NAs in lat/long
-table(is.na(cam_locs$study_area)) # no NAs in study area column either, so all cameras were successfully assigned to a study area
-
-class(cam_locs) # data.table, data.frame
-
-## Need to add a site column containing the ID for each site, or sensor cluster. This is relevant to all areas but Sambaa K'e (which will just be the station, or location)
-
-## First, need to clean up discrepancies in location names for Fort Smith and Gameti
-# Fort Smith - BMS-TLU-126-099 should be TLU-126-099
-cam_locs$location[cam_locs$location == "BMS-TLU-126-099"] <- "TLU-126-099"
-
-# Remove last suffix from stations with SRL-308, 310, and 316 (FSMC sites), since third suffix already makes them unique (and including it mixes up site identification code below)
-# Even though these are ID'd as clustered sites, they don't adhere to the same dice pattern as other sites. Not sure if they should be kept as sites or treated as independent stations - keeping as clustered sites for now
-# Note also that the station coordinates in site 308 are incorrect in the WildTrax ARU DATA (on wrong side of the river)
-# Identify FortSmith rows with exactly 3 hyphens (i.e., 4 parts)
-fsmc_sites <- cam_locs$study_area == "FortSmith" &
-  stringr::str_count(cam_locs$location, "-") == 3
-
-# Drop the last hyphen-separated part ONLY for those rows
-cam_locs$location[fsmc_sites] <-
-  sub("-[^-]+$", "", cam_locs$location[fsmc_sites])
-
-### Gameti - Gameti station names seem to be all mixed up - 6 stations seem to be clustered in the wrong site, but also camera station names aren't aligning with ARU station names or those on the google drive
-## For now, just fix BMS-KLP-049-01 (even though I think this should be KLP-047-01 - see Gameti_station_site_mixups.csv) so there are the correct number of sites
-cam_locs$location[cam_locs$location == "BMS-KLP-049-01"] <- "KLP-049-01"
-
-
-## Now add site column, where sites = everything but last suffix of location names
-cam_locs <- cam_locs %>% 
-  mutate(site = if_else(
-         study_area == "SambaaK'e", location, # if study_area is Sambaa K'e, return location ID, otherwise
-         gsub(pattern = "-(?:[^-]+)(?=\\s*,|$)", # locate the last hyphen-separated part of each location ID
-              "", # remove the last hyphen-separated part (i.e., replace it with nothing)
-              location, # column to look for matches
-              perl = TRUE) ## uses perl-compatible regex strings
-         ))
-table(is.na(cam_locs$site)) # no NAs
-glimpse(cam_locs)
+## Load spatial file
+cam_locs_sf <- read_sf("data/wt_location_data/nwtbm_cam_locations_20260506.gpkg")
+st_crs(cam_locs_sf) # crs 3580
+plot(cam_locs_sf["study_area"]) # plot camera locations colored by study area
+glimpse(cam_locs_sf)
 
 ## Re-order columns so study_area and site are first
 cam_locs <- cam_locs %>% 
-  select(study_area, site, location, latitude, longitude, buffer_m, location_visibility, true_coordinates, location_comments, internal_wildtrax_id)
+  select(study_area, site, location, latitude, longitude, sensor_type)
 
 length(unique(cam_locs$site)) ## 167 unique sites across all study areas
 
@@ -159,25 +68,11 @@ sites_sa <- cam_locs %>%
 
 glimpse(cam_locs)
 
-### Save cam_locs as csv file
-write.csv(cam_locs, "data/wt_location_data/all_projects_cam_locations_20260327.csv", row.names = FALSE)
-table(cam_locs$study_area)
 
-#### Updated to here on March 27 2026
-
-## read in cam_locs from csv file (if already created)
-# cam_locs <- read.csv("data/wt_location_data/all_projects_cam_locations_20260327.csv")
-
-### Plot camera locations to check they look correct
-cam_locs_sf <- st_as_sf(cam_locs, coords = c("longitude", "latitude"), crs = 4326) # convert to sf object with WGS 84 CRS
-plot(cam_locs_sf["study_area"]) # plot camera locations colored by study area 
-
-## Within each study area, calculate pairwise distances between locations (in meters) using st_distance function from sf package
-cam_locs_sf <- st_transform(cam_locs_sf, crs = 3580) # transform to NWT Lambert Area projection for accurate distance calculations in meters
-
-## save cam_locs_sf as shapefile for later use in extracting spatial data around stations
-st_write(cam_locs_sf, "data/wt_location_data/all_projects_cam_locations_20260310.shp", delete_layer = TRUE)
-
+### Calculate distances between stations
+## Transform sf obj into NWT Lambert
+cam_locs_sf <- st_transform(cam_locs_sf, crs = 3580)
+st_crs(cam_locs_sf)
 
 # Function to compute pairwise distance summary for one study area
 distance_summary <- function(df) {
@@ -188,12 +83,12 @@ distance_summary <- function(df) {
   # Keep only lower triangle (no duplicates, no diagonal)
   dvals <- dmat[lower.tri(dmat)]
   tibble(
-    study_area = unique(df$study_area),
     mean_dist = mean(dvals),
     min_dist  = min(dvals),
     max_dist  = max(dvals)
   )
 }
+
 
 ## Apply distance_summary function to each study area and combine results into a single data frame
 dist_sa <- cam_locs_sf %>%
@@ -205,37 +100,72 @@ dist_sa <- cam_locs_sf %>%
 ## TDN locations 27m apart - three stations accidentally deployed twice (032-01A/B, 032-02A/B, 032-03A/B)
 ## Otherwise, minimum distances between cameras = 114m in NW.
 
-# ## Which locations are 0m apart in Norman Wells? In cam_locs, which rows have identical lat/long coordinates? 
-## (These have been corrected in my downloaded copy of the csv, not yet on WildTrax (19 Feb 2026))
-# norman_wells_locs <- cam_locs %>% filter(study_area == "NormanWells")
-# norman_wells_locs <- norman_wells_locs %>%
-#   mutate(lat_long = paste(latitude, longitude)) # create a combined lat/long column for easier comparison
-# duplicate_locs <- norman_wells_locs %>%
-#   group_by(lat_long) %>%
-#   filter(n() > 1) # keep only rows with duplicate lat/long values 
-# 
-# ## BMS-NRA-050-16 and BMS-NRA-050-18 have same coordinates - error in WildTrax
-# ## 050-18 should be 65.35197, -126.52474
+### Create polygons around sites
+site_polygons <- cam_locs_sf %>%
+  group_by(study_area, site) %>%
+  summarise(
+    geometry = st_convex_hull(st_union(geom)),
+    .groups = "drop"
+  )
+glimpse(site_polygons) ## most are polygons, except Sambaa K'e and one lone station in Ft Smith (kept as points)
+plot(site_polygons["study_area"])
 
+## What is the average distance between sites?
+dist_sites <- site_polygons %>% 
+  group_by(study_area) %>%
+  group_modify(~ distance_summary(.x)) %>%
+  ungroup()
 
-## Total distance summaries (not split by study area)
-mean(dist_sa$mean_dist) #65.3 km
-min(dist_sa$min_dist) # 27 m (or 114 m, if we exclude the three stations that were accidentally deployed twice in TDN)
-max(dist_sa$max_dist) # 282 km
+## What is the average area of the site polygons by study area?
+site_polygons$site_area <- as.numeric(st_area(site_polygons))
+# Convert to sq km
+site_polygons$site_area_sqkm <- site_polygons$site_area/1e+06
+
+site_area_sa <- site_polygons %>% 
+  group_by(study_area) %>% 
+  summarise(min_area = min(site_area_sqkm),
+            mean_area = mean(site_area_sqkm),
+            max_area = max(site_area_sqkm))
+
+### Save summaries
+cam_spatial_sum <- left_join(dist_sa, dist_sites, by = "study_area")
+cam_spatial_sum <- left_join(cam_spatial_sum, site_area_sa, by = "study_area")
+# rename columns
+colnames(cam_spatial_sum) <- c("study_area", "mean_station_distance_m", "min_station_distance_m", "max_station_distance_m", "mean_site_distance_m", "min_site_distance_m", "max_site_distance_m", "min_site_area_sqkm", "mean_site_area_sqkm", "max_site_area_sqkm")
+#remove geometry column
+cam_spatial_sum <- cam_spatial_sum[ ,1:10]
+
+write.csv(cam_spatial_sum, "data/wt_location_data/nwtbm_station_site_spatial_summaries.csv")
+
 
 #### Buffer size selections: ####
-## could assume 100m, as minimal distance between stations, represents 4th order selection (i.e foraging patch)
-## 500 m buffer is fairly standard, representing 3rd order selection (i.e. selecting habitat components in a home range), despite variance across species
+## Start with 500m buffers around sites, approximating 3rd order selection
 
-## Create an sf object using cam_locs_sf with 100m and 500m buffers around camera locations for later use in extracting fire history data around camera locations
-cams_100m_buffer <- st_buffer(cam_locs_sf, dist = 100)
-cams_500m_buffer <- st_buffer(cam_locs_sf, dist = 500)
+## Create an sf object using site_polygons with 500m buffers around sites for later use in extracting fire history data around camera locations
+sites_500m <- st_buffer(site_polygons, dist = 500)
 
-plot(cams_100m_buffer["study_area"]) # test plot 100m buffers around camera locations
+plot(sites_500m["study_area"])
 
-### Save cams_100m buffer and cams_500m_buffer as sf objects (shp files) for extracting spatial data around stations
-st_write(cams_100m_buffer, "data/wt_location_data/cams_100m_buffer.shp", delete_layer = TRUE)
-st_write(cams_500m_buffer, "data/wt_location_data/cams_500m_buffer.shp", delete_layer = TRUE)
+## Plot SambaaK'e to look at buffer overlap
+sk_500m <- sites_500m %>% 
+  filter(study_area == "SambaaK'e") %>% 
+  plot()
+sk_500m #12 buffers overalp, which isn't too bad
+
+## Re-calculate area of 500m buffer polygons
+sites_500m$site_area <- as.numeric(st_area(sites_500m))
+# Convert to sq km
+sites_500m$site_area_sqkm <- sites_500m$site_area/1e+06
+
+site500_area_sa <- sites_500m %>% 
+  group_by(study_area) %>% 
+  summarise(min_area = min(site_area_sqkm),
+            mean_area = mean(site_area_sqkm),
+            max_area = max(site_area_sqkm))
+
+### Save 500m site buffer as sf objects (gpkg files) for extracting spatial data around stations
+
+st_write(sites_500m, "data/wt_location_data/nwtbm_sites_500mbuffer.gpkg", delete_layer = TRUE)
 
 
 #### Study Area polygons and buffers ####
