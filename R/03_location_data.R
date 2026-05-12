@@ -48,7 +48,7 @@ cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
 glimpse(cam_locs)
 ## Load spatial file
 cam_locs_sf <- read_sf("data/wt_location_data/nwtbm_cam_locations_20260506.gpkg")
-st_crs(cam_locs_sf) # crs 3580
+st_crs(cam_locs_sf) # crs 4326
 plot(cam_locs_sf["study_area"]) # plot camera locations colored by study area
 glimpse(cam_locs_sf)
 
@@ -56,7 +56,7 @@ glimpse(cam_locs_sf)
 cam_locs <- cam_locs %>% 
   select(study_area, site, location, latitude, longitude, sensor_type)
 
-length(unique(cam_locs$site)) ## 167 unique sites across all study areas
+length(unique(cam_locs$site)) ## 172 unique sites across all study areas
 
 sites_sa <- cam_locs %>% 
   group_by(study_area) %>% 
@@ -107,7 +107,7 @@ site_polygons <- cam_locs_sf %>%
     geometry = st_convex_hull(st_union(geom)),
     .groups = "drop"
   )
-glimpse(site_polygons) ## most are polygons, except Sambaa K'e and one lone station in Ft Smith (kept as points)
+glimpse(site_polygons) ## most are polygons, except Sambaa K'e and one lone station in Ft Smith (kept as points - only one stn with data in the FS site)
 plot(site_polygons["study_area"])
 
 ## What is the average distance between sites?
@@ -150,7 +150,13 @@ plot(sites_500m["study_area"])
 sk_500m <- sites_500m %>% 
   filter(study_area == "SambaaK'e") %>% 
   plot()
-sk_500m #12 buffers overalp, which isn't too bad
+#12 buffers overlap, which isn't too bad
+
+## Plot Fort Smith to look at weird line of polygons in NE corner
+fs_500m <- sites_500m %>% 
+  filter(study_area == "FortSmith") %>% 
+  plot()
+fs_500m # locations are spread out further than in other areas
 
 ## Re-calculate area of 500m buffer polygons
 sites_500m$site_area <- as.numeric(st_area(sites_500m))
@@ -164,10 +170,17 @@ site500_area_sa <- sites_500m %>%
             max_area = max(site_area_sqkm))
 
 ## Save site polygons
-st_write(site_polygons, "data/wt_location_data/nwtbm_sites.gpkg", delete_layer = TRUE)
+st_write(site_polygons, "data/wt_location_data/nwtbm_cam_sites.gpkg", delete_layer = TRUE)
 ### Save 500m site buffer as sf objects (gpkg files) for extracting spatial data around stations
-st_write(sites_500m, "data/wt_location_data/nwtbm_sites_500mbuffer.gpkg", delete_layer = TRUE)
+st_write(sites_500m, "data/wt_location_data/nwtbm_cam_sites_500mbuffer.gpkg", delete_layer = TRUE)
 
+
+### Also save 500m buffer around locations, approximating 4th order selection (ungulates) or 3rd order for game birds?
+cam_locs_500 <- st_buffer(cam_locs_sf, dist = 500)
+
+## save 
+### Save 500m site buffer as sf objects (gpkg files) for extracting spatial data around stations
+st_write(cam_locs_500, "data/wt_location_data/nwtbm_cam_locations_500mbuffer.gpkg", delete_layer = TRUE)
 
 #### Study Area polygons and buffers ####
 getwd()
