@@ -163,8 +163,9 @@ site500_area_sa <- sites_500m %>%
             mean_area = mean(site_area_sqkm),
             max_area = max(site_area_sqkm))
 
+## Save site polygons
+st_write(site_polygons, "data/wt_location_data/nwtbm_sites.gpkg", delete_layer = TRUE)
 ### Save 500m site buffer as sf objects (gpkg files) for extracting spatial data around stations
-
 st_write(sites_500m, "data/wt_location_data/nwtbm_sites_500mbuffer.gpkg", delete_layer = TRUE)
 
 
