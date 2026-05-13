@@ -8,8 +8,7 @@
 #### Environment set up ####
 ## Load required packages (should already be installed)
 
-list.of.packages <- c("wildrtrax",
-                      "sf",
+list.of.packages <- c("sf",
                       "lwgeom",
                       "data.table",
                       "tidyverse",
@@ -39,17 +38,8 @@ new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"
 if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only = TRUE)
 
-<<<<<<< HEAD
-=======
-## Read in in cam_locs_sf, cams_100m_buffer, and cams_500m_buffer from R/03_location_data.R
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/wt_location_data")
-list.files()
 
-cam_locs_sf <- st_read("all_projects_cam_locations_20260310.shp")
-cams_100m_buffer <- st_read("cams_100m_buffer.shp")
-cams_500m_buffer <- st_read("cams_500m_buffer.shp")
-
-## Also read in study area shapefiles - both regular and with 20km buffer (in study_area_spatial)
+## Read in study area shapefiles - both regular and with 20km buffer (in study_area_spatial)
 setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/study_area_spatial")
 list.files()
 sa_poly <- st_read("NWTBM_all_study_areas.shp")
@@ -57,7 +47,7 @@ sa_20km <- st_read("NWTBM_all_study_areas_20km_buffers.shp")
 crs(sa_poly)
 crs(sa_20km) # same projection
 
->>>>>>> 0dc4e6fcf01eeddf2207a0c70ece3fa85b5355e6
+
 
 #### Load Fire History data ####
 ## Canada Fire History data between 1972-2024 from NRCan: https://cwfis.cfs.nrcan.gc.ca/datamart/metadata/nbac
@@ -92,12 +82,8 @@ st_write(sa_20km_fires, "NBAC_fires_by_study_area_20kmbuffer.shp", append = FALS
 sa_poly$area_m2 <- st_area(sa_poly)
 
 
-
-# ##### Extract fire data for study areas without buffers - not done yet ###
-# ## First calculate total area of study areas (will be needed later)
-# sa_poly$area_m2 <- st_area(sa_poly)
-# 
-# sa_fires_nobuffer <- st_intersection(sa_20km_fires, sa_poly)
+##### Extract fire data for study areas without buffers - not done yet ###
+sa_fires_nobuffer <- st_intersection(sa_20km_fires, sa_poly)
 
 ## Remove fire_history from environment to save memory
 rm(fire_history)
@@ -231,7 +217,6 @@ fireage_sa
 ggsave("figures/fire_explore/fireages_byarea_20kbuffer_20260427.png", fireage_sa, width = 12, height = 8, dpi = 300)
 
 
-
 ### Fire Mapping: NWT and by Study Area ####
 
 ### Map of all NWT fire history plus sensor locations (including 500m buffers for visibility)
@@ -351,109 +336,118 @@ lm(ADJ_HA ~ FireAge, data = sa_20km_fires) %>% summary() ## Low R-squared and no
 
 
 
-##### Fire data buffered by station ####
+##### Fire data buffered by site ####
 
-## Note (Apr 27 2026): all the station-specific data needs to be extracted again once station coordinates have been fixed in nwtbm_phd_general project (and then converted to spatial data in 03_location_data)
+## Read in site polygons and 500m site buffers from R/03_location_data.R
+site_polygons <- st_read("data/wt_location_data/nwtbm_cam_sites.gpkg")
+sites_500m <- st_read("data/wt_location_data/nwtbm_cam_sites_500mbuffer.gpkg")
 
-## Read in in cam_locs_sf, cams_100m_buffer, and cams_500m_buffer from R/03_location_data.R
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/wt_location_data")
-list.files()
+glimpse(sites_500m) ## area of 500m site buffer already calculated in sq. m and sq. km
 
-cam_locs_sf <- st_read("all_projects_cam_locations_20260310.shp")
-cams_100m_buffer <- st_read("cams_100m_buffer.shp")
-cams_500m_buffer <- st_read("cams_500m_buffer.shp")
+## Then extract fire for site buffer areas (using sa_20km_fires)
+fires_500m_buffer <- st_intersection(sa_20km_fires, sites_500m)
 
-## Also read in study area shapefiles - both regular and with 20km buffer (in study_area_spatial)
-setwd("C:/Users/tatterer.stu/Desktop/nwtbm_phd_ungulates/data/study_area_spatial")
-list.files()
-sa_poly <- st_read("NWTBM_all_study_areas.shp")
-sa_20km <- st_read("NWTBM_all_study_areas_20km_buffers.shp")
-crs(sa_poly)
-crs(sa_20km) # same projection
-
-
-## Then extract fire for cam buffer areas (using sa_20km_fires)
-fires_100m_buffer <- st_intersection(sa_20km_fires, cams_100m_buffer)
-fires_500m_buffer <- st_intersection(sa_20km_fires, cams_500m_buffer)
-
-
-crs(fires_100m_buffer) # check CRS of fire data within buffers
+glimpse(fires_500m_buffer) ## 116 rows - not all sites contain fire data (expected)
+crs(fires_500m_buffer) # check CRS of fire data within buffers
 
 
 ## Quick summary of fire years represented
-summary(fires_100m_buffer$YEAR) ## 1972-2024, median 1994
-summary(fires_500m_buffer$YEAR) ## 1972-2024, median 1995
+summary(fires_500m_buffer$YEAR) ## 1972-2023, median 1995
+hist(fires_500m_buffer$YEAR) #roughly normal distribution
+hist(fires_500m_buffer$POLY_HA) ## area burned calculated per burn, not at site polygon level (see documentation for details, and Skakun et al. 2021: https://cwfis.cfs.nrcan.gc.ca/downloads/nbac/NBAC_1972to2024_20250506_shp_metadata.pdf)
+hist(fires_500m_buffer$ADJ_HA) # adjusted area burned (identical to above)
 
-hist(fires_100m_buffer$YEAR) # roughly normal distribution, with big spikes in late 1970s, early 1990s
-hist(fires_500m_buffer$YEAR) # similar distribution to 100m but with more fires overall (since larger buffer)
-hist(fires_100m_buffer$POLY_HA) # total area of fire polygons in hectares using Canada Albers Equal Area projection (pre-calculated by NRCan)
-hist(fires_500m_buffer$POLY_HA)
-hist(sa_20km_fires$ADJ_HA) # adjusted area burned (see documentation for details, and Skakun et al. 2021: https://cwfis.cfs.nrcan.gc.ca/downloads/nbac/NBAC_1972to2024_20250506_shp_metadata.pdf)
-
-plot(fires_100m_buffer["YEAR"]) # map of fire years within 100m buffer around camera locations
 plot(fires_500m_buffer["YEAR"]) # map of fire years within 500m buffer around camera locations
 
 ## Not all sensor locations have fire history data within 100m or 500m buffers. Some locations have multiple fire polygons within the buffers
-length(unique(fires_100m_buffer$location)) # 336 locations have fire history data within 100m buffer
-length(unique(fires_500m_buffer$location)) # 360 locations have fire history data within 500m buffer
+length(unique(fires_500m_buffer$site)) # 94 out of 172 sites have fire history data within 500m buffer
+
+## Where fire geometries overlap, or one is contained within another, the most recent should be kept
+## Check for polygon overlap or containment
+fires_intersect <- st_intersects(fires_500m_buffer)
+any(lengths(fires_intersect) > 1) #TRUE - there are polygons that overlap others 
+sum(lengths(fires_intersect) > 1) ##46 geometries intersect
+
+## Plotting intersecting polygons
+plot(st_geometry(fires_500m_buffer), border = 'grey')
+plot(
+  st_geometry(fires_500m_buffer[lengths(fires_intersect) > 1, ]),
+  col = 'red', add = TRUE
+)
 
 
-## What is the proportion of burned/unburned area around camera locations? Stick to 500m buffer for simplicity
-# For 500m around each camera location, calculate total area of fire polygons (in hectares) and divide by total area of 500m buffer (in m^2) to get proportion of burned area within 500m buffer
-# total area of 500m buffer = pi *(500^2) m^2 = 785398.16 m^2
+# 1. Sort: most recent FIRST
+fires_sorted <- fires_500m_buffer %>%
+  arrange(FireAge) %>%
+  mutate(id = row_number())
+
+# 2. Iteratively remove overlaps with newer fires
+clean_geoms <- vector("list", nrow(fires_sorted))
+
+for (i in seq_len(nrow(fires_sorted))) {
+  
+  current_geom <- fires_sorted$geometry[i]
+  
+  if (i > 1) {
+    # union of ALL more recent fires
+    newer_union <- st_union(fires_sorted$geometry[1:(i - 1)])
+    
+    # remove any overlap
+    current_geom <- st_difference(current_geom, newer_union)
+  }
+  
+  clean_geoms[[i]] <- current_geom[[1]]
+}
+
+# 3. Rebuild sf object
+fires_clean <- fires_sorted %>%
+  mutate(geometry = st_sfc(clean_geoms, crs = st_crs(fires_500m_buffer))) %>%
+  filter(!st_is_empty(geometry))
+
+## Rename to keep 500m buffer in name
+fires_500m_cleaned <- fires_clean
+
+## What is the proportion of burned/unburned area around camera sites? Stick to 500m buffer for simplicity
+# For 500m around each camera site, calculate total area of fire polygons (in hectares) and divide by total area of 500m buffer (in m^2) to get proportion of burned area within 500m buffer
+# total area of 500m buffer in sq m saved in site_area column
 
 
 ## For each unique location in fires_500m_buffer, calculate total area of all fire polygons within 500m buffers
-## Result should be a spatial data frame with one row per unique location, and columns for total burned area within 500m buffers
+## Result should be a spatial data frame with one row per unique location, and columns for proportion burned area within 500m buffers
 
-#### Burned area within 100m buffer (not using right now) ####
-burned_area_100m <- fires_100m_buffer %>%
-  group_by(study_area, location) %>% ## group all polygons with same location and study area together
+#### Proportion of burned area within 500m buffer ####
+burned_area_500m <- fires_500m_cleaned %>% 
+  group_by(study_area, site, site_area) %>% ## group all polygons with same site and study area together (keep site_area too)
   summarise(geometry = st_union(geometry)) %>% # combine all fire polygons from the same location
   mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
-  mutate(proportion_burned_100m = as.numeric(burned_area_m2/(pi * (100^2)))) %>%  # calculate proportion of burned area within 100m buffer (convert to numeric to avoid units issues)
-  st_drop_geometry() # drop geometry for easier joining with cam_locs_sf
+  mutate(proportion_burned_500m = as.numeric(burned_area_m2/site_area)) %>%  # calculate proportion of burned area within 500m buffer (convert to numeric to avoid units issues
+  st_drop_geometry() # drop geometry for easier joining with sites_polygons
 
+str(burned_area_500m$site) 
+str(site_polygons$site)
 
-#### Burned area within 500m buffer ####
-burned_area_500m <- fires_500m_buffer %>% 
-  group_by(study_area, location) %>% ## group all polygons with same location and study area together
-  summarise(geometry = st_union(geometry)) %>% # combine all fire polygons from the same location
-  mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
-  mutate(proportion_burned_500m = as.numeric(burned_area_m2/(pi * (500^2)))) %>%  # calculate proportion of burned area within 500m buffer (convert to numeric to avoid units issues
-  st_drop_geometry() # drop geometry for easier joining with cam_locs_sf
-
-str(burned_area_500m$location) 
-str(cam_locs_sf$location)
-
-## add proportion_burned_m2 to cam_locs_sf for 100m and 500m buffers, adding a 0 value for locations with no fire history data within the buffer
-cam_locs_burnedprop <- cam_locs_sf %>%
+## add proportion_burned_m2 to site_polygons for 500m buffers, adding a 0 value for locations with no fire history data within the buffer
+cam_sites_burnedprop <- site_polygons %>%
   left_join(
-    burned_area_100m %>% 
-      select(location, proportion_burned_100m),
-    by = c("study_area", "location") ## join 100m burn by location to match fire data to camera locations
+    burned_area_500m %>% 
+      select(study_area, site, proportion_burned_500m),
+    by = c("study_area", "site") ## join 500m burn by site to match fire data to camera sites
   ) %>%
-  left_join(burned_area_500m %>% 
-              select(location, proportion_burned_500m),
-            by = c("study_area", "location") ## join 500m burn by location to match fire data to camera locations
-  ) %>%
-  mutate(
-    proportion_burned_100m = ifelse(is.na(proportion_burned_100m), 0, proportion_burned_100m),
-    proportion_burned_500m = ifelse(is.na(proportion_burned_500m), 0, proportion_burned_500m)) ## replace NA values with 0 for locations with no fire history data within the buffer
+  mutate(proportion_burned_500m = ifelse(is.na(proportion_burned_500m), 0, proportion_burned_500m)) ## replace NA values with 0 for sites with no fire history data within the buffer
 
-glimpse(cam_locs_burnedprop) ## check that the new columns have been added correctly
-summary(cam_locs_burnedprop) ## most locations have 0 burned area within 100m buffer, but some have up to 100% burned area
-class(cam_locs_burnedprop) # sf object with 706 rows and 9 columns (including geometry)
+glimpse(cam_sites_burnedprop) ## check that the new columns have been added correctly
+hist(cam_sites_burnedprop$proportion_burned_500m) ## bimodal distribution - many sites (>80) with 0 burn, and some up to 100%
+class(cam_sites_burnedprop) # sf object with 167 rows and 6 columns (including geometry)
 
+## Histogram of proportion of burned area within 500m buffers - proportion burned on the x-axis (binned to 0.1 intervals), frequency on the y-axis
 
-## Histogram of proportion of burned area within 100m and 500m buffers - proportion burned on the x-axis (binned to 0.1 intervals), frequency on the y-axis
-hist_burned_100m <- cam_locs_burnedprop %>%
+hist_burned_500m <- cam_sites_burnedprop %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = proportion_burned_100m)) +
+  ggplot(aes(x = proportion_burned_500m)) +
   geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
-  labs(title = "Distribution of Proportion of Burned Area within 100m Buffer of Camera Locations",
+  labs(title = "Distribution of Proportion of Burned Area within 500m Buffer of Camera Sites",
        x = "Proportion of Burned Area",
-       y = "Count of Locations") +
+       y = "Count of Sites") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -461,11 +455,317 @@ hist_burned_100m <- cam_locs_burnedprop %>%
   theme(axis.title.y = element_text(size = 16))
 
 win.graph()
-hist_burned_100m
+hist_burned_500m
 ## save
-ggsave("figures/fire_explore/propburned_100mbuffer_20260305.png", hist_burned_100m, width = 12, height = 8, dpi = 300)
+ggsave("figures/fire_explore/propburned_sites_500mbuffer_20260512.png", hist_burned_500m, width = 12, height = 8, dpi = 300)
 
-hist_burned_500m <- cam_locs_burnedprop %>%
+## facet by study area
+
+#500m buffer
+hist_burned_sa_500m <- cam_sites_burnedprop %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = proportion_burned_500m)) +
+  geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
+  facet_wrap(~ study_area) +
+  labs(title = "Distribution of Proportion of Burned Area within 500m Buffer of Camera Sites",
+       x = "Proportion of Burned Area",
+       y = "Count of Sites") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16))
+
+win.graph()
+hist_burned_sa_500m
+## save
+ggsave("figures/fire_explore/propburned_sites_500mbuffer_studyarea_20260512.png", hist_burned_sa_500m, width = 12, height = 8, dpi = 300)
+
+## Proportion of burned/unburned areas around cameras has a biphasic distribution with peaks at 0 (unburned) and 1 (fully burned)
+## Removing some of the older fires (e.g., considering them unburned after a certain number of years) would decrease proportion of areas considered burned, which might help even out the distribution
+## Could assume that after a certain number of years post-fire, the area would be regenerated to either deciduous shrub/mixedwood or deciduous forest (i.e., remove fire polygons prior to that time)
+
+#### Fire Age at each site ####
+## Faceted plot of Fire Age for 500m buffer
+fireage_500 <- fires_500m_cleaned %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = FireAge)) +
+  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
+  facet_wrap(~ study_area) +
+  labs(title = "Burn Age by Study Area (500m buffer)",
+       x = "Burn Age",
+       y = "Count of Sites") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+fireage_500
+## save
+ggsave("figures/fire_explore/fireages_byarea_sites_500mbuffer_20260512.png", fireage_500, width = 12, height = 8, dpi = 300)
+
+## Not faceted
+fireage_all_500 <- fires_500m_cleaned %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = FireAge)) +
+  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
+  labs(title = "Burn Age (500m buffer)",
+       x = "Burn Age",
+       y = "Count of Sites") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+fireage_all_500
+## save
+ggsave("figures/fire_explore/fireages_sites_500mbuffer_20260512.png", fireage_all_500, width = 12, height = 8, dpi = 300)
+
+
+## Some sites have multiple ages represented within their polygon (duplicated sites in fires_500m_cleaned)
+## For each site with multiple fires, summarize FireAge and proportion of the burn for each fire at that site
+multifires <- fires_500m_cleaned %>%
+  group_by(site) %>%
+  filter(n()>1) %>%
+  select(study_area, site, site_area, NFIREID, YEAR, FireAge) %>% 
+  mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
+  mutate(proportion_burned_500m = as.numeric(burned_area_m2/site_area)) %>%  # calculate proportion of burned area within 500m buffer (convert to numeric to avoid units issues
+  arrange(site, FireAge) %>% 
+  ungroup()
+
+## Plot Year by proportion for each site
+multifire_sites <- multifires %>%
+  st_drop_geometry() %>% # drop geometry for easier plotting
+  ggplot(aes(x = FireAge, y = proportion_burned_500m)) +
+  geom_bar(stat = "identity", fill = "orange", color = "black") +
+  facet_wrap(~ site) +
+  labs(x = "Burn Age",
+       y = "Proportion burned") +
+  theme_classic() + 
+  # increase size of title text, axis text, and facet titles
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.title.y = element_text(size = 16)) +
+  theme(strip.text = element_text(size = 14)) # increase facet title size
+
+win.graph()
+multifire_sites 
+## Not sure how to account for these in modelling yet
+
+#### Map out sites with multiple fires
+## Edehzhie
+ede_multifires <- ggplot() +
+    geom_sf(data = multifires %>% filter(study_area == "Edéhzhíe"),
+            aes(fill = FireAge), color = NA,
+            size = 0.5) +
+    
+    scale_fill_gradient(low = "red", high = "yellow", name = "Burn Age") +
+    labs(title = "Edéhzhíe",
+         x = "Longitude",
+         y = "Latitude") +
+    
+    theme_classic() +
+    theme(
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+      legend.position = "right"
+    )
+
+win.graph()
+ede_multifires
+
+## Fort Smith
+fs_multifires <- ggplot() +
+  geom_sf(data = multifires %>% filter(study_area == "FortSmith"),
+          aes(fill = FireAge), color = NA,
+          size = 0.5) +
+  
+  scale_fill_gradient(low = "red", high = "yellow", name = "Burn Age") +
+  labs(title = "FortSmith",
+       x = "Longitude",
+       y = "Latitude") +
+  
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    legend.position = "right"
+  )
+
+win.graph()
+fs_multifires
+
+## Sambaa K'e
+sk_multifires <- ggplot() +
+  geom_sf(data = multifires %>% filter(study_area == "SambaaK'e"),
+          aes(fill = FireAge), color = NA,
+          size = 0.5) +
+  
+  scale_fill_gradient(low = "red", high = "yellow", name = "Burn Age") +
+  labs(title = "SambaaK'e",
+       x = "Longitude",
+       y = "Latitude") +
+  
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    legend.position = "right"
+  )
+
+win.graph()
+sk_multifires ## only 2 sites - and it is mostly newer fire (2023) so could probably ignore the effect of the 2013 fire...
+
+## Gameti
+gam_multifires <- ggplot() +
+  geom_sf(data = multifires %>% filter(study_area == "Gameti"),
+          aes(fill = FireAge), color = NA,
+          size = 0.5) +
+  
+  scale_fill_gradient(low = "red", high = "yellow", name = "Burn Age") +
+  labs(title = "Gameti",
+       x = "Longitude",
+       y = "Latitude") +
+  
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    legend.position = "right"
+  )
+
+win.graph()
+gam_multifires ## BMS-CRU-183 is mostly 2014 fire, BMS-CRU-174 is mostly 2012 fire. BMS-CRU-089 is 25% 2014, 43% 1979 
+
+## What is the difference in proportions in sites with multiple fires?
+diff_by_site <- multifires %>%
+  group_by(site) %>%
+  summarise(
+    max_prop = max(proportion_burned_500m, na.rm = TRUE),
+    min_prop = min(proportion_burned_500m, na.rm = TRUE),
+    diff_prop = max_prop - min_prop,
+    max_year = max(FireAge, na.rm = TRUE),
+    min_year = min(FireAge, na.rm = TRUE),
+    diff_year = max_year - min_year,
+    .groups = "drop"
+  )
+summary(diff_by_site$diff_prop)
+win.graph()
+hist(diff_by_site$diff_prop)
+## 19 sites total, 5 sites have a difference < 0.2. Small enough proportion of total sites (172) that I could just choose the age of the fire with the greater proportion
+hist(diff_by_site$diff_year)
+
+######## NEED TO MAKE A CALL ON HOW TO ASSIGN FIRE AGE WITHIN THESE BUFFERS ########
+## Save cam_sites_burnedprop in meantime (no fire age data) and fires_500m_cleaned (fire data for site with fire)
+write.csv(cam_sites_burnedprop, "data/nrcan_nbac/propburned_cam_sites500m_20260513.csv")
+write.csv(fires_500m_cleaned, "data/nrcan_nbac/nbac_firedata_cam_sites500m_20260513.csv")
+
+##### Fire data buffered by station ####
+
+## Read in site polygons and 500m site buffers from R/03_location_data.R
+cam_locs_sf <- st_read("data/wt_location_data/nwtbm_cam_locations_20260506.gpkg")
+cam_locs_500m <- st_read("data/wt_location_data/nwtbm_cam_locations_500mbuffer.gpkg")
+
+glimpse(cam_locs_500m) ## area of 500m site buffer already calculated in sq. m and sq. km
+
+## Then extract fire for site buffer areas (using sa_20km_fires)
+stn_fires500 <- st_intersection(sa_20km_fires, cam_locs_500m)
+
+glimpse(stn_fires500) ## 453 rows - not all sites contain fire data (expected)
+crs(stn_fires500) # check CRS of fire data within buffers
+
+
+## Quick summary of fire years represented
+summary(stn_fires500$YEAR) ## 1972-2023, median 1995
+hist(stn_fires500$YEAR) #roughly normal distribution (VERY roughly...)
+
+## Not all sensor locations have fire history data within 100m or 500m buffers. Some locations have multiple fire polygons within the buffers
+length(unique(stn_fires500$location)) # 373 out of 730 locations have fire history data within 500m buffer
+
+## Where fire geometries overlap, or one is contained within another, the most recent should be kept
+## Check for polygon overlap or containment
+stn_fires_intersect <- st_intersects(stn_fires500)
+any(lengths(stn_fires_intersect) > 1) #TRUE - there are polygons that overlap others 
+sum(lengths(stn_fires_intersect) > 1) ## 437 geometries intersect
+
+## Plotting intersecting polygons
+win.graph()
+plot(st_geometry(stn_fires500), border = 'grey')
+plot(
+  st_geometry(stn_fires500[lengths(stn_fires_intersect) > 1, ]),
+  col = 'red', add = TRUE
+)
+
+
+# 1. Sort: most recent FIRST
+stn_fires_sorted <- stn_fires500 %>%
+  arrange(FireAge) %>%
+  mutate(id = row_number())
+
+# 2. Iteratively remove overlaps with newer fires
+
+clean_geoms <- vector("list", nrow(stn_fires_sorted))
+
+for (i in seq_len(nrow(stn_fires_sorted))) {
+  
+  current_geom <- stn_fires_sorted$geometry[i]
+  
+  if (i > 1) {
+    newer_union <- st_union(stn_fires_sorted$geometry[1:(i - 1)])
+    current_geom <- st_difference(current_geom, newer_union)
+  }
+  
+  clean_geoms[[i]] <- current_geom
+}
+
+fires_clean <- stn_fires_sorted
+fires_clean$geometry <- st_sfc(
+  do.call(c, clean_geoms),  # safely flatten
+  crs = st_crs(stn_fires500)
+)
+
+stn_fires_clean <- fires_clean[!st_is_empty(fires_clean), ]
+
+
+## Rename to keep 500m buffer in name
+stn_fires500_cleaned <- stn_fires_clean
+
+## What is the proportion of burned/unburned area around camera locations?
+# For 500m around each camera location, calculate total area of fire polygons (in hectares) and divide by total area of 500m buffer (in m^2) to get proportion of burned area within 500m buffer
+# total area of 500m buffer in sq m = 500^2*pi
+
+## For each unique location in fires_500m_buffer, calculate total area of all fire polygons within 500m buffers
+## Result should be a spatial data frame with one row per unique location, and columns for proportion burned area within 500m buffers
+
+#### Proportion of burned area within 500m buffer ####
+burned_area_stn500 <- stn_fires500 %>% 
+  group_by(study_area, location) %>% ## group all polygons with same site and study area together (keep site_area too)
+  summarise(geometry = st_union(geometry)) %>% # combine all fire polygons from the same location
+  mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
+  mutate(proportion_burned_500m = as.numeric(burned_area_m2/((500^2)*pi))) %>%  # calculate proportion of burned area within 500m buffer (convert to numeric to avoid units issues)
+  st_drop_geometry() # drop geometry for easier joining with sites_polygons
+
+
+
+## add proportion_burned_m2 to cam_locs for 500m buffers, adding a 0 value for locations with no fire history data within the buffer
+cam_stns_burnedprop <- cam_locs_sf %>%
+  left_join(
+    burned_area_stn500 %>% 
+      select(study_area, location, proportion_burned_500m),
+    by = c("study_area", "location") ## join 500m burn by site to match fire data to camera sites
+  ) %>%
+  mutate(proportion_burned_500m = ifelse(is.na(proportion_burned_500m), 0, proportion_burned_500m)) ## replace NA values with 0 for sites with no fire history data within the buffer
+
+glimpse(cam_stns_burnedprop) ## check that the new columns have been added correctly
+hist(cam_stns_burnedprop$proportion_burned_500m) ## zero-inflated distribution - majority sites (>80) with 0 burn, and some up to 100%
+class(cam_stns_burnedprop) # sf object with 730 rows and 6 columns (including geometry)
+
+
+## Histogram of proportion of burned area within 500m buffers - proportion burned on the x-axis (binned to 0.1 intervals), frequency on the y-axis
+
+hist_burned_500m <- cam_stns_burnedprop %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
   ggplot(aes(x = proportion_burned_500m)) +
   geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
@@ -481,31 +781,12 @@ hist_burned_500m <- cam_locs_burnedprop %>%
 win.graph()
 hist_burned_500m
 ## save
-ggsave("figures/fire_explore/propburned_500mbuffer_20260305.png", hist_burned_500m, width = 12, height = 8, dpi = 300)
+ggsave("figures/fire_explore/propburned_stations_500mbuffer_20260513.png", hist_burned_500m, width = 12, height = 8, dpi = 300)
 
 ## facet by study area
-#100m buffer
-hist_burned_sa_100m <- cam_locs_burnedprop %>%
-  st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = proportion_burned_100m)) +
-  geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
-  facet_wrap(~ study_area) +
-  labs(title = "Distribution of Proportion of Burned Area within 100m Buffer of Camera Locations",
-       x = "Proportion of Burned Area",
-       y = "Count of Locations") +
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16))
-
-win.graph()
-hist_burned_sa_100m
-## save
-ggsave("figures/fire_explore/propburned_100mbuffer_studyarea_20260305.png", hist_burned_sa_100m, width = 12, height = 8, dpi = 300)
 
 #500m buffer
-hist_burned_sa_500m <- cam_locs_burnedprop %>%
+hist_burned_sa_500m <- cam_stns_burnedprop %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
   ggplot(aes(x = proportion_burned_500m)) +
   geom_histogram(binwidth = 0.1, fill = "orange", color = "black") + ## Binned to 0.1 intervals
@@ -519,148 +800,23 @@ hist_burned_sa_500m <- cam_locs_burnedprop %>%
   theme(axis.title.x = element_text(size = 16)) +
   theme(axis.title.y = element_text(size = 16))
 
-win.graph()
+
 hist_burned_sa_500m
 ## save
-ggsave("figures/fire_explore/propburned_500mbuffer_studyarea_20260305.png", hist_burned_sa_500m, width = 12, height = 8, dpi = 300)
+ggsave("figures/fire_explore/propburned_stations_500mbuffer_studyarea_20260513.png", hist_burned_sa_500m, width = 12, height = 8, dpi = 300)
 
 ## Proportion of burned/unburned areas around cameras has a biphasic distribution with peaks at 0 (unburned) and 1 (fully burned)
-## Increasing the scale of measurement from 100m to 500m increases the proportion burned somewhat, but distrib is still uneven
-## Removing some of the older fires (e.g., considering them unburned after a certain number of years) would decrease proportion of areas considered burned, which might help even out the distribution
-## Could assume that after a certain number of years post-fire, the area would be regenerated to either deciduous shrub/mixedwood or deciduous forest (i.e., remove fire polygons prior to that time)
 
-
-#### Histogram of fire years within each study area (100m buffer) ####
-glimpse(fires_100m_buffer)
-## 100m buffer histogram (binned to 10 years to reduce gaps in data, since many years don't have fire representation)
-hist_fires_100 <- fires_100m_buffer %>%
-  st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = YEAR)) +
-  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
-  facet_wrap(~ study_area) +
-  labs(title = "Distribution of Fire Years within 100m Buffer of Camera Locations",
-       x = "Fire Year",
-       y = "Count of Stations") +
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16)) +
-  theme(strip.text = element_text(size = 14)) # increase facet title size
-
-win.graph()
-hist_fires_100
-## save
-ggsave("figures/fire_explore/hist_fires_100mbuffer_20260224.png", hist_fires_100, width = 12, height = 8, dpi = 300)
-
-## 500m buffer histogram (binned to 10 years to reduce gaps in data, since many years don't have fire representation)
-hist_fires_500 <- fires_500m_buffer %>%
-  st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = YEAR)) +
-  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
-  facet_wrap(~ study_area) +
-  labs(title = "Distribution of Fire Years within 500m Buffer of Camera Locations",
-       x = "Fire Year",
-       y = "Count of Stations") +
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16)) +
-  theme(strip.text = element_text(size = 14)) # increase facet title size
-
-win.graph()
-hist_fires_500
-## save
-ggsave("figures/fire_explore/hist_fires_500mbuffer_20260224.png", hist_fires_500, width = 12, height = 8, dpi = 300)
-
-## 100 and 500m buffers have similar representation of fire years
-
-## NO FACETING - Fire History across all study areas (100m buffer)
-nwt_fire_hist_100 <- fires_100m_buffer %>%
-  st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = YEAR)) +
-  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
-  labs(title = "Distribution of Fire Years within 100m Buffer of Camera Locations - all study areas",
-       x = "Fire Year",
-       y = "Count of Stations") +
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16)) +
-  theme(strip.text = element_text(size = 14)) # increase facet title size
-
-win.graph()
-nwt_fire_hist_100
-## save
-ggsave("figures/fire_explore/allSAs_hist_fires_100mbuffer_20260303.png", nwt_fire_hist_100, width = 12, height = 8, dpi = 300)
-
-## 500m buffer
-nwt_fire_hist_500 <- fires_500m_buffer %>%
-  st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = YEAR)) +
-  geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
-  labs(title = "Distribution of Fire Years within 500m Buffer of Camera Locations - all study areas",
-       x = "Fire Year",
-       y = "Count of Count of Stations") +
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16)) +
-  theme(strip.text = element_text(size = 14)) # increase facet title size
-
-win.graph()
-nwt_fire_hist_500
-## save
-ggsave("figures/fire_explore/allSAs_hist_fires_500mbuffer_20260303.png", nwt_fire_hist_500, width = 12, height = 8, dpi = 300)
-
-## Convert fire years to burn age (or time since fire for each year of camera data)
-## Need a year from which to calculate time since fire - use the first year of data collection for each study area
-## 2021 for Edehzhie and TDN, 2022 for Norman Wells and Sambaa K'e, 2023 for Fort Smith and Gameti
-## Need to make sure fire date isn't after deployment date (but cam_locs doesn't have deployment date. Will need to check stations with 0 - or negative! - values later)
-
-glimpse(fires_500m_buffer)
-
-## Create Year0 for fires_500m_buffer(corresponding to LAST year of deployment)
-fires_500m_buffer <- fires_500m_buffer %>%
-  mutate(Year0 = case_when(
-    str_detect(study_area, "Edéhzhíe") ~ "2022",
-    str_detect(study_area, "FortSmith") ~ "2024",
-    str_detect(study_area, "Gameti") ~ "2024",
-    str_detect(study_area, "NormanWells") ~ "2024",
-    str_detect(study_area, "SambaaK'e") ~ "2023",
-    str_detect(study_area, "ThaideneNëné") ~ "2022",
-    TRUE ~ NA_character_  # Default case if no match
-  ))
-class(fires_500m_buffer$Year0)
-
-fires_500m_buffer$Year0 <- as.numeric(fires_500m_buffer$Year0)
-glimpse(fires_500m_buffer)
-
-fires_500m_buffer$FireAge <- fires_500m_buffer$Year0 - fires_500m_buffer$YEAR
-summary(fires_500m_buffer$FireAge)
-hist(fires_500m_buffer$FireAge)
-
-## how many (and which ones) are negative values?
-neg.fire.age <- fires_500m_buffer[fires_500m_buffer$FireAge < 0, ]
-table(neg.fire.age$study_area) # 10 Edehzhie, 6 ThaideneNene
-## Can remove these since fire doesn't occur during deployment period
-
-
-fires_500m_buffer <- fires_500m_buffer[!fires_500m_buffer$FireAge < 0, ]
-summary(fires_500m_buffer$FireAge)
-
+#### Fire Age at each site ####
 ## Faceted plot of Fire Age for 500m buffer
-fireage_500 <- fires_500m_buffer %>%
+fireage_500 <- stn_fires500_cleaned %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
   ggplot(aes(x = FireAge)) +
   geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
   facet_wrap(~ study_area) +
-  labs(title = "Time Since Fire by Study Area (500m buffer)",
-       x = "Time Since Fire",
-       y = "Count of Stations") +
+  labs(title = "Burn Age by Study Area (500m buffer)",
+       x = "Burn Age",
+       y = "Count of Locations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -671,16 +827,16 @@ fireage_500 <- fires_500m_buffer %>%
 win.graph()
 fireage_500
 ## save
-ggsave("figures/fire_explore/fireages_byarea_500mbuffer_20260320.png", fireage_500, width = 12, height = 8, dpi = 300)
+ggsave("figures/fire_explore/fireages_byarea_stations_500mbuffer_20260513.png", fireage_500, width = 12, height = 8, dpi = 300)
 
 ## Not faceted
-fireage_all_500 <- fires_500m_buffer %>%
+fireage_all_500 <- stn_fires500_cleaned %>%
   st_drop_geometry() %>% # drop geometry for easier plotting
   ggplot(aes(x = FireAge)) +
   geom_histogram(binwidth = 10, fill = "orange", color = "black") + ## Binned to 10 years to reduce gaps in data
-  labs(title = "Time Since Fire (500m buffer)",
-       x = "Time Since Fire",
-       y = "Count of Stations") +
+  labs(title = "Burn Age (500m buffer)",
+       x = "Burn Age",
+       y = "Count of Locations") +
   theme_classic() + 
   # increase size of title text, axis text, and facet titles
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -688,62 +844,41 @@ fireage_all_500 <- fires_500m_buffer %>%
   theme(axis.title.y = element_text(size = 16)) +
   theme(strip.text = element_text(size = 14)) # increase facet title size
 
-win.graph()
 fireage_all_500
 ## save
-ggsave("figures/fire_explore/fireages_500mbuffer_20260320.png", fireage_all_500, width = 12, height = 8, dpi = 300)
+ggsave("figures/fire_explore/fireages_stations_500mbuffer_20260513.png", fireage_all_500, width = 12, height = 8, dpi = 300)
 
 
-## How many sites have more than 1 fire polygon within 500m?
-table(duplicated(fires_500m_buffer$location)) #80 sites have multiple fire polygons
-## How many polygons are duplicated across sites (i.e. polygons that include multiple sites)
-table(duplicated(fires_500m_buffer$NFIREID)) #384 polygon IDs match another (i.e., 379 sites are located within the same fire polygon as another site)
+## Some locations have multiple ages represented within their polygon (duplicated sites in stns_fires500_cleaned)
+## For each site with multiple fires, summarize FireAge and proportion of the burn for each fire at that location
+stn_multifires <- stn_fires500_cleaned %>%
+  group_by(location) %>%
+  filter(n()>1) %>%
+  select(study_area, site, location, NFIREID, YEAR, FireAge) %>% 
+  mutate(burned_area_m2 = st_area(geometry)) %>% # calculate area of combined fire polygons in m^2
+  mutate(proportion_burned_500m = as.numeric(burned_area_m2/((500^2)*pi))) %>%  # calculate proportion of burned area within 500m buffer (convert to numeric to avoid units issues
+  arrange(site, location, FireAge) %>% 
+  ungroup()
 
-length(unique(fires_500m_buffer$NFIREID)) # 48 unique fire polygons represented
-
-#### Fire Size ####
-## Can use ADJ_HA in fires_500m_buffer, but there will be duplicates because some fires cover multiple sites. But that's okay for this exploration
-hist(fires_500m_buffer$ADJ_HA) ## fire sizes follow a general poisson distribution, with many small fires and few large fires (outliers up to 800 000 ha) 
-
-## ggplot
-hist_fire_size <- fires_500m_buffer %>% 
-  st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = ADJ_HA)) +
-  geom_histogram(binwidth = 10000, fill = "orange", color = "black") + ## Binned to 10,000 ha intervals
-  labs(title = "Distribution of Fire Sizes (for fires within 500m of sites)",
-       x = "Fire Size (HA)",
-       y = "Count of Stations") +
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16))
-
+## What is the difference in proportions in locations with multiple fires?
+diff_by_stn <- stn_multifires %>%
+  group_by(location) %>%
+  summarise(
+    max_prop = max(proportion_burned_500m, na.rm = TRUE),
+    min_prop = min(proportion_burned_500m, na.rm = TRUE),
+    diff_prop = max_prop - min_prop,
+    max_year = max(FireAge, na.rm = TRUE),
+    min_year = min(FireAge, na.rm = TRUE),
+    diff_year = max_year - min_year,
+    .groups = "drop"
+  )
+summary(diff_by_stn$diff_prop)
 win.graph()
-hist_fire_size
+hist(diff_by_stn$diff_prop) ## About 20 stations with <0.10 difference in proportions between fires, 30 with <0.20
 
-## save
-ggsave("figures/fire_explore/hist_fire_size_500mbuffer_20260310.png", hist_fire_size, width = 12, height = 8, dpi = 300)
+hist(diff_by_stn$diff_year)
 
-## Fire size by study area
-hist_fire_size_sa <- fires_500m_buffer %>% 
-  st_drop_geometry() %>% # drop geometry for easier plotting
-  ggplot(aes(x = ADJ_HA)) +
-  geom_histogram(binwidth = 10000, fill = "orange", color = "black") + ## Binned to 10,000 ha intervals
-  facet_wrap(~ study_area) +
-  labs(title = "Distribution of Fire Sizes by Study Area (for fires within 500m of sites)",
-       x = "Fire Size (HA)",
-       y = "Count of Stations") +
-  theme_classic() + 
-  # increase size of title text, axis text, and facet titles
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.title.y = element_text(size = 16))
-
-win.graph()
-hist_fire_size_sa
-
-## save
-ggsave("figures/fire_explore/hist_fire_size_500mbuffer_studyarea_20260310.png", hist_fire_size_sa, width = 12, height = 8, dpi = 300)
-
- 
+######## NEED TO MAKE A CALL ON HOW TO ASSIGN FIRE AGE WITHIN THESE BUFFERS ########
+## Save cam_sites_burnedprop in meantime (no fire age data) and fires_500m_cleaned (fire data for site with fire)
+write.csv(cam_stns_burnedprop, "data/nrcan_nbac/propburned_cam_locations500_20260513.csv")
+write.csv(stn_fires500_cleaned, "data/nrcan_nbac/nbac_firedata_cam_locations500_20260513.csv")
