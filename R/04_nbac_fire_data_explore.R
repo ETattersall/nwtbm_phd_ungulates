@@ -688,7 +688,7 @@ length(unique(stn_fires500$location)) # 373 out of 730 locations have fire histo
 ## Check for polygon overlap or containment
 stn_fires_intersect <- st_intersects(stn_fires500)
 any(lengths(stn_fires_intersect) > 1) #TRUE - there are polygons that overlap others 
-sum(lengths(stn_fires_intersect) > 1) ## 437 geometries intersect
+sum(lengths(stn_fires_intersect) > 1) ## 439 geometries intersect
 
 ## Plotting intersecting polygons
 win.graph()
@@ -760,7 +760,7 @@ cam_stns_burnedprop <- cam_locs_sf %>%
 
 glimpse(cam_stns_burnedprop) ## check that the new columns have been added correctly
 hist(cam_stns_burnedprop$proportion_burned_500m) ## zero-inflated distribution - majority sites (>80) with 0 burn, and some up to 100%
-class(cam_stns_burnedprop) # sf object with 730 rows and 6 columns (including geometry)
+class(cam_stns_burnedprop) # sf object with 731 rows and 6 columns (including geometry)
 
 
 ## Histogram of proportion of burned area within 500m buffers - proportion burned on the x-axis (binned to 0.1 intervals), frequency on the y-axis
