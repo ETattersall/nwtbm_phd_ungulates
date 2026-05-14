@@ -182,7 +182,9 @@ cam_locs_500 <- st_buffer(cam_locs_sf, dist = 500)
 ### Save 500m site buffer as sf objects (gpkg files) for extracting spatial data around stations
 st_write(cam_locs_500, "data/wt_location_data/nwtbm_cam_locations_500mbuffer.gpkg", delete_layer = TRUE)
 
-#### Study Area polygons and buffers ####
+#######################################################################
+
+#### Creating buffers around study area polygons ####
 getwd()
 setwd("data/study_area_spatial")
 list.files() ## want shapefiles of combined study areas, plus the Sambaa K'e winter road, which will have to be added
