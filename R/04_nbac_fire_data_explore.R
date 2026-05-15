@@ -407,6 +407,11 @@ fires_clean <- fires_sorted %>%
 ## Rename to keep 500m buffer in name
 fires_500m_cleaned <- fires_clean
 
+
+######### Combine site data to fire data BEFORE calculating proportion burned. Sites with multiple fires will be duplicated. Prop burned for no fire sites will be 0
+## Output: df where each row = 1 station, 1 fire polygon
+#########
+
 ## What is the proportion of burned/unburned area around camera sites? Stick to 500m buffer for simplicity
 # For 500m around each camera site, calculate total area of fire polygons (in hectares) and divide by total area of 500m buffer (in m^2) to get proportion of burned area within 500m buffer
 # total area of 500m buffer in sq m saved in site_area column
@@ -426,18 +431,18 @@ burned_area_500m <- fires_500m_cleaned %>%
 str(burned_area_500m$site) 
 str(site_polygons$site)
 
-## add proportion_burned_m2 to site_polygons for 500m buffers, adding a 0 value for locations with no fire history data within the buffer
-cam_sites_burnedprop <- site_polygons %>%
-  left_join(
-    burned_area_500m %>% 
-      select(study_area, site, proportion_burned_500m),
-    by = c("study_area", "site") ## join 500m burn by site to match fire data to camera sites
-  ) %>%
-  mutate(proportion_burned_500m = ifelse(is.na(proportion_burned_500m), 0, proportion_burned_500m)) ## replace NA values with 0 for sites with no fire history data within the buffer
-
-glimpse(cam_sites_burnedprop) ## check that the new columns have been added correctly
-hist(cam_sites_burnedprop$proportion_burned_500m) ## bimodal distribution - many sites (>80) with 0 burn, and some up to 100%
-class(cam_sites_burnedprop) # sf object with 167 rows and 6 columns (including geometry)
+# ## add proportion_burned_m2 to site_polygons for 500m buffers, adding a 0 value for locations with no fire history data within the buffer
+# cam_sites_burnedprop <- site_polygons %>%
+#   left_join(
+#     burned_area_500m %>% 
+#       select(study_area, site, proportion_burned_500m),
+#     by = c("study_area", "site") ## join 500m burn by site to match fire data to camera sites
+#   ) %>%
+#   mutate(proportion_burned_500m = ifelse(is.na(proportion_burned_500m), 0, proportion_burned_500m)) ## replace NA values with 0 for sites with no fire history data within the buffer
+# 
+# glimpse(cam_sites_burnedprop) ## check that the new columns have been added correctly
+# hist(cam_sites_burnedprop$proportion_burned_500m) ## bimodal distribution - many sites (>80) with 0 burn, and some up to 100%
+# class(cam_sites_burnedprop) # sf object with 167 rows and 6 columns (including geometry)
 
 ## Histogram of proportion of burned area within 500m buffers - proportion burned on the x-axis (binned to 0.1 intervals), frequency on the y-axis
 
@@ -657,8 +662,16 @@ hist(diff_by_site$diff_prop)
 ## 19 sites total, 5 sites have a difference < 0.2. Small enough proportion of total sites (172) that I could just choose the age of the fire with the greater proportion
 hist(diff_by_site$diff_year)
 
+## Add fire age data to cam_sites_burnedprop
+glimpse(cam_sites_burnedprop)
+glimpse(fires_500m_cleaned)
+
+cam_sites_prop_age <- left_join
+
 ######## NEED TO MAKE A CALL ON HOW TO ASSIGN FIRE AGE WITHIN THESE BUFFERS ########
+
 ## Save cam_sites_burnedprop in meantime (no fire age data) and fires_500m_cleaned (fire data for site with fire)
+
 write.csv(cam_sites_burnedprop, "data/nrcan_nbac/propburned_cam_sites500m_20260513.csv")
 write.csv(fires_500m_cleaned, "data/nrcan_nbac/nbac_firedata_cam_sites500m_20260513.csv")
 
@@ -682,7 +695,7 @@ summary(stn_fires500$YEAR) ## 1972-2023, median 1995
 hist(stn_fires500$YEAR) #roughly normal distribution (VERY roughly...)
 
 ## Not all sensor locations have fire history data within 100m or 500m buffers. Some locations have multiple fire polygons within the buffers
-length(unique(stn_fires500$location)) # 373 out of 730 locations have fire history data within 500m buffer
+length(unique(stn_fires500$location)) # 374 out of 731 locations have fire history data within 500m buffer
 
 ## Where fire geometries overlap, or one is contained within another, the most recent should be kept
 ## Check for polygon overlap or containment

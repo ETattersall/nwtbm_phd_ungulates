@@ -42,23 +42,23 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only = TRUE)
 
 
-#### Load in camera locations ####
+#### Load in sensor locations ####
 ## Location names and coordinates were aggregated and checked in nwtbm_phd_general/02_merge_station_locations.R
-cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
-glimpse(cam_locs)
+sensor_locs <- read.csv("C:/Users/tatterer.stu/Desktop/nwtbm_phd_general/data/sensor_locations/nwtbm_allsensor_locations_20260506.csv")
+glimpse(sensor_locs)
 ## Load spatial file
-cam_locs_sf <- read_sf("data/wt_location_data/nwtbm_cam_locations_20260506.gpkg")
-st_crs(cam_locs_sf) # crs 4326
-plot(cam_locs_sf["study_area"]) # plot camera locations colored by study area
-glimpse(cam_locs_sf)
+sensor_locs_sf <- read_sf("C:/Users/tatterer.stu/Desktop/nwtbm_phd_general/data/sensor_locations/nwtbm_allsensor_locations_20260506.gpkg")
+st_crs(sensor_locs_sf) # crs 4326
+plot(sensor_locs_sf["study_area"]) # plot sensor locations colored by study area
+glimpse(sensor_locs_sf)
 
 ## Re-order columns so study_area and site are first
-cam_locs <- cam_locs %>% 
+sensor_locs <- sensor_locs %>% 
   select(study_area, site, location, latitude, longitude, sensor_type)
 
-length(unique(cam_locs$site)) ## 172 unique sites across all study areas
+length(unique(sensor_locs$site)) ## 232 unique sites across all study areas
 
-sites_sa <- cam_locs %>% 
+sites_sa <- sensor_locs %>% 
   group_by(study_area) %>% 
   summarise(
     n_sites = n_distinct(site),
@@ -66,13 +66,13 @@ sites_sa <- cam_locs %>%
     .groups = "drop"
   )
 
-glimpse(cam_locs)
+glimpse(sensor_locs)
 
 
 ### Calculate distances between stations
 ## Transform sf obj into NWT Lambert
-cam_locs_sf <- st_transform(cam_locs_sf, crs = 3580)
-st_crs(cam_locs_sf)
+sensor_locs_sf <- st_transform(sensor_locs_sf, crs = 3580)
+st_crs(sensor_locs_sf)
 
 # Function to compute pairwise distance summary for one study area
 distance_summary <- function(df) {
@@ -91,17 +91,17 @@ distance_summary <- function(df) {
 
 
 ## Apply distance_summary function to each study area and combine results into a single data frame
-dist_sa <- cam_locs_sf %>%
+dist_sa <- sensor_locs_sf %>%
   group_by(study_area) %>%
   group_modify(~ distance_summary(.x)) %>%
   ungroup()
 
 
 ## TDN locations 27m apart - three stations accidentally deployed twice (032-01A/B, 032-02A/B, 032-03A/B)
-## Otherwise, minimum distances between cameras = 114m in NW.
+## Otherwise, minimum distances between sensoreras = 114m in NW.
 
 ### Create polygons around sites
-site_polygons <- cam_locs_sf %>%
+site_polygons <- sensor_locs_sf %>%
   group_by(study_area, site) %>%
   summarise(
     geometry = st_convex_hull(st_union(geom)),
@@ -128,20 +128,20 @@ site_area_sa <- site_polygons %>%
             max_area = max(site_area_sqkm))
 
 ### Save summaries
-cam_spatial_sum <- left_join(dist_sa, dist_sites, by = "study_area")
-cam_spatial_sum <- left_join(cam_spatial_sum, site_area_sa, by = "study_area")
+sensor_spatial_sum <- left_join(dist_sa, dist_sites, by = "study_area")
+sensor_spatial_sum <- left_join(sensor_spatial_sum, site_area_sa, by = "study_area")
 # rename columns
-colnames(cam_spatial_sum) <- c("study_area", "mean_station_distance_m", "min_station_distance_m", "max_station_distance_m", "mean_site_distance_m", "min_site_distance_m", "max_site_distance_m", "min_site_area_sqkm", "mean_site_area_sqkm", "max_site_area_sqkm")
+colnames(sensor_spatial_sum) <- c("study_area", "mean_station_distance_m", "min_station_distance_m", "max_station_distance_m", "mean_site_distance_m", "min_site_distance_m", "max_site_distance_m", "min_site_area_sqkm", "mean_site_area_sqkm", "max_site_area_sqkm")
 #remove geometry column
-cam_spatial_sum <- cam_spatial_sum[ ,1:10]
+sensor_spatial_sum <- sensor_spatial_sum[ ,1:10]
 
-write.csv(cam_spatial_sum, "data/wt_location_data/nwtbm_station_site_spatial_summaries.csv")
+write.csv(sensor_spatial_sum, "data/wt_location_data/nwtbm_station_site_spatial_summaries.csv")
 
 
 #### Buffer size selections: ####
 ## Start with 500m buffers around sites, approximating 3rd order selection
 
-## Create an sf object using site_polygons with 500m buffers around sites for later use in extracting fire history data around camera locations
+## Create an sf object using site_polygons with 500m buffers around sites for later use in extracting fire history data around sensorera locations
 sites_500m <- st_buffer(site_polygons, dist = 500)
 
 plot(sites_500m["study_area"])
@@ -170,17 +170,17 @@ site500_area_sa <- sites_500m %>%
             max_area = max(site_area_sqkm))
 
 ## Save site polygons
-st_write(site_polygons, "data/wt_location_data/nwtbm_cam_sites.gpkg", delete_layer = TRUE)
+st_write(site_polygons, "data/wt_location_data/nwtbm_sensor_sites.gpkg", delete_layer = TRUE)
 ### Save 500m site buffer as sf objects (gpkg files) for extracting spatial data around stations
-st_write(sites_500m, "data/wt_location_data/nwtbm_cam_sites_500mbuffer.gpkg", delete_layer = TRUE)
+st_write(sites_500m, "data/wt_location_data/nwtbm_sensor_sites_500mbuffer.gpkg", delete_layer = TRUE)
 
 
 ### Also save 500m buffer around locations, approximating 4th order selection (ungulates) or 3rd order for game birds?
-cam_locs_500 <- st_buffer(cam_locs_sf, dist = 500)
+sensor_locs_500 <- st_buffer(sensor_locs_sf, dist = 500)
 
 ## save 
 ### Save 500m site buffer as sf objects (gpkg files) for extracting spatial data around stations
-st_write(cam_locs_500, "data/wt_location_data/nwtbm_cam_locations_500mbuffer.gpkg", delete_layer = TRUE)
+st_write(sensor_locs_500, "data/wt_location_data/nwtbm_sensor_locations_500mbuffer.gpkg", delete_layer = TRUE)
 
 #######################################################################
 
