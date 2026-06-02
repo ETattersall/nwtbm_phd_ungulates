@@ -104,7 +104,7 @@ win.graph()
 plot_det
 
 ## Save plot
-ggsave("figures/sambaake_winterroad_allspecies_detections_2022-2023.png", plot_det, width = 12, height = 8, dpi = 300)
+ggsave("figures/sambaake_winterroad_allspecies_detections_2022-2023.png", plot_det, width = 18, height = 12, dpi = 300)
 
 
 
@@ -148,7 +148,7 @@ win.graph()
 plot_naiocc
 
 ## Save plot
-ggsave("figures/sambaake_winterroad_allspecies_naiveoccupancy_2022-2023.png", plot_naiocc, width = 12, height = 8, dpi = 300)
+ggsave("figures/sambaake_winterroad_allspecies_naiveoccupancy_2022-2023.png", plot_naiocc, width = 18, height = 12, dpi = 300)
 
 
 #### 3. Spatial patterns in detections ####
@@ -294,7 +294,7 @@ stgr_det <- ggplot() +
 win.graph()
 stgr_det
 
-ggsave("figures/sk_wr2022-2023_spatial_stgr_detections.png", moose_det, width = 12, height = 8, dpi = 300)
+ggsave("figures/sk_wr2022-2023_spatial_stgr_detections.png", stgr_det, width = 12, height = 8, dpi = 300)
 
 
 
