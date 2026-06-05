@@ -7,7 +7,7 @@
 #############################################
 
 
-list.of.packages <- c( "sf", "maptiles", "ggspatial", "terra","kableExtra", "tidyr", "leaflet", "dplyr", "viridis", "corrplot", "lubridate", "plotly", "ggplot2")
+list.of.packages <- c("tidyverse", "sf", "maptiles", "ggspatial", "terra","kableExtra", "leaflet", "viridis", "corrplot", "lubridate", "plotly", "ggplot2", "ggbreak")
 lapply(list.of.packages, require, character.only = TRUE)
 
 ## Needed to download station locations
@@ -24,15 +24,19 @@ wt_auth()
 ## Get project information for my WildTrax projects
 cam_projects <- wt_get_projects("CAM")
 
-## Check for project of interest (Sambaa K'e - project ID = 1906)
+## Check for project of interest (Edehzhie - project ID = 1465)
 
-## Download single project data - Sambaa K'e tags
-sk_camdata <- wt_download_report(project_id = 1906,
+## Download single project data - Edehzhie tags
+ede_camdata <- wt_download_report(project_id = 1465,
                                sensor_id = "CAM",
                                report = "main") # main reports include ALL DATA
 
-glimpse(sk_camdata)
+glimpse(ede_camdata)
+summary(ede_camdata)
 
+## Do all stations have detections?
+length(unique(ede_camdata$location)) #177 
+table(is.na(ede_camdata$location))
 
 ### Load station lookup table to correct names from WildTrax
 stn_lookup <- read.csv("data/nwtbm_station_name_lookup_table.csv")
@@ -42,8 +46,6 @@ glimpse(stn_lookup)
 ## Remove column X
 stn_lookup <- stn_lookup %>% select(-X)
 
-## Remove duplicate rows
-stn_lookup <- distinct(stn_lookup)
 
 ## Load location data to add station coordinates
 cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
@@ -52,35 +54,38 @@ glimpse(cam_locs)
 ## Remove column X
 cam_locs <- cam_locs %>% select(-X)
 
+## Filter to Edehzhie cameras only
+ede_locs <- cam_locs %>% filter(study_area == "Edéhzhíe")
+
 ## Correct tag data location names using stn_lookup
 # Filter lookup to relevant project
-sk_lookup <- stn_lookup %>% filter(study_area == "SambaaK'e")
+ede_lookup <- stn_lookup %>% filter(study_area == "Edéhzhíe")
 
 
 ## Join the lookup to the tag data by location and location_wt, then convert location to location_std
-sk_camdata <- sk_camdata %>%
-  left_join(sk_lookup,
-            by = c("location" = "location_wt")) %>% # indicating that the multiple rows in the lookup table will match multiple rows in sk_camdata
-  mutate(location = location_std) %>% #converting wt station names to standardized names
+ede_camdata <- ede_camdata %>%
+  left_join(ede_lookup,
+            by = c("location" = "location_wt")) %>% # indicating that the multiple rows in the lookup table will match multiple rows in ede_camdata
+ mutate(location = location_std) %>% #converting wt station names to standardized names
   select(-location_std) # removing location_std column from lookup
 
 
 ### Create independent detections from camera data, with a standard threshold of 30 minutes
-sk_det <- wt_ind_detect(sk_camdata,
+ede_det <- wt_ind_detect(ede_camdata,
                         threshold = 30,
                         units = "minutes")
-glimpse(sk_det)
+glimpse(ede_det)
 
 
 ## Add location coordinates to detection data
-sk_det <- sk_det %>% 
+ede_det <- ede_det %>% 
   left_join(cam_locs, by = "location")
-glimpse(sk_det)
+glimpse(ede_det)
 
-
+length(unique(ede_det$location)) #173 - should be 179. 6 stations didn't have any detections
 
 #### 1. Plot total detections of all species detected ####
-spp_count <- sk_det %>% 
+spp_count <- ede_det %>% 
   group_by(species_common_name) %>% 
   summarise(count = n()) %>% 
   arrange(desc(count)) %>% ## descending order of detections
@@ -91,34 +96,47 @@ plot_det <- ggplot(spp_count,
                    aes(x = count, y = fct_reorder(species_common_name, count))) + # re-orders species into descending count
   geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
   labs(
-    title = "Total Species Detections, Sambaa K'e Winter Road 2022-2023",
+    title = "Total Species Detections, Edéhzhíe 2021-2022",
     x = "Independent Detections (30 min.)",
     y = NULL) + # removes y-axis title
+  scale_x_continuous(breaks = c(0, 200, 400, 600, 2800)) + # define x-axis ticks
+  scale_x_break(c(650, 2700)) + ## add x-axis break
   theme_classic() + 
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
   theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.text = element_text(size = 16))
+  theme(axis.text = element_text(size = 12)) +
+  theme( #remove top axis
+    axis.text.x.top = element_blank(),
+    axis.ticks.x.top = element_blank(),
+    axis.title.x.top = element_blank())
+
 
 win.graph()
 plot_det
 
 ## Save plot
-ggsave("figures/sambaake_winterroad_allspecies_detections_2022-2023.png", plot_det, width = 18, height = 12, dpi = 300)
+ggsave("figures/Edehzhie_allspecies_detections_2021-2022.png", plot_det, width = 18, height = 12, dpi = 300)
 
 
 
 #### 2. Naive occupancy ####
+## get list of all stations (since not all stations are included in ede_det - some stns contained no wildlife)
+all_stns <- ede_locs %>% distinct(location)
+
 ## Create a site by species detection matrix for all sampled locations
-site_species_cams <- sk_camdata %>%
+stn_species_cams <- ede_camdata %>%
   distinct(study_area, location, species_common_name) %>% # get unique combinations of study area, location and species tags
   mutate(detection = 1L) %>% # assign a detection value of 1 for each location-species combination (L for integer)
   pivot_wider(names_from = species_common_name, values_from = detection, values_fill = 0L) %>% # pivot to wide format, filling missing combinations with 0 (non-detection) as an integer
-  select( -NONE, -`STAFF/SETUP`, -Vehicle, -Unidentified) # remove non-wildlife columns
-# glimpse(site_species_cams)
+  select( -NONE, -`STAFF/SETUP`, -Vehicle, -Unidentified, -Human) # remove non-wildlife columns
+glimpse(stn_species_cams)
+
+unique(stn_species_cams$location) 
+
 
 ## Convert to long format for plotting
-spp_naive_long <- site_species_cams %>% 
+spp_naive_long <- stn_species_cams %>% 
   group_by(study_area, location) %>% 
   pivot_longer(cols = -c(study_area, location), ## all columns except these
                names_to = "species_common_name",
@@ -135,31 +153,31 @@ plot_naiocc <- ggplot(spp_naive_summary,
                    aes(x = naive_occupancy, y = fct_reorder(species_common_name, naive_occupancy))) + # re-orders species into descending naive_occupancy
   geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
   labs(
-    title = "Naive Species Occupancy, Sambaa K'e Winter Road 2022-2023",
+    title = "Naive Species Occupancy, Edéhzhíe 2021-2022",
     x = "Naive Occupancy",
     y = NULL) + # removes y-axis title
   theme_classic() + 
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
   theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.text = element_text(size = 16))
+  theme(axis.text = element_text(size = 12))
 
 win.graph()
 plot_naiocc
 
 ## Save plot
-ggsave("figures/sambaake_winterroad_allspecies_naiveoccupancy_2022-2023.png", plot_naiocc, width = 18, height = 12, dpi = 300)
+ggsave("figures/edehzhie_allspecies_naiveoccupancy_2021-2022.png", plot_naiocc, width = 18, height = 12, dpi = 300)
 
 
 #### 3. Spatial patterns in detections ####
 ## Only for target species (individual plots)
 
-### Create a site by species count matrix, where values = total number of detections of each species at each station
-## get list of all stations (since not all stations are included in sk_det - some stns contained no wildlife)
-all_stns <- sk_locs %>% distinct(location)
+### Create a stn by species count matrix, where values = total number of detections of each species at each station
+## get list of all stations (since not all stations are included in ede_det - some stns contained no wildlife)
+all_stns <- ede_locs %>% distinct(location)
 
 
-stn_det <- sk_det %>%
+stn_det <- ede_det %>%
   count(location, species_common_name) # count detections per location and species
 
 ## include missing stations in stn_species_count
@@ -168,44 +186,44 @@ stn_species_count <- all_stns %>%
 pivot_wider(names_from = species_common_name, values_from = n, values_fill = 0L) %>%  # pivot to wide format, filling missing combinations with 0 (non-detection) as an integer
 select(-`NA`) # remove NA column
 
-## Filter for Sambaa K'e locations in cam_locs
-sk_locs <- cam_locs %>% filter(study_area == "SambaaK'e")
-glimpse(sk_locs)
 
-tar_spp <- "Woodland Caribou"
-
-## pull target counts from site_species_count
-focal_ct <- pull(stn_species_count, tar_spp)
-
-## Plot with leaflet
-m <- leaflet() %>% 
-  addProviderTiles(providers$Esri.WorldTopoMap, group="Base") %>%     
-  addCircleMarkers(lng=sk_locs$longitude, lat=sk_locs$latitude,
-                   # Add a popup of the deployment code 
-                   popup=paste(sk_locs$location),
-                   radius=(focal_ct/max(focal_ct)*10)+1, stroke=F,
-                   fillOpacity=0.6) 
-m
+### Leaflet plot
+# ## Name target species - Woodland caribou, Moose, Bison, Sharp-tailed Grouse, Spruce Grouse, Ruffed Grouse, Willow Ptarmigan
+# tar_spp <- "Woodland Caribou"
+# 
+# ## pull target counts from site_species_count
+# focal_ct <- pull(stn_species_count, tar_spp)
+# 
+# ## Plot with leaflet
+# m <- leaflet() %>% 
+#   addProviderTiles(providers$Esri.WorldTopoMap, group="Base") %>%     
+#   addCircleMarkers(lng=sk_locs$longitude, lat=sk_locs$latitude,
+#                    # Add a popup of the deployment code 
+#                    popup=paste(sk_locs$location),
+#                    radius=(focal_ct/max(focal_ct)*10)+1, stroke=F,
+#                    fillOpacity=0.6) 
+# m
 
 
 ## Plot with ggplot and basemap
 
 ## Convert stn_species_count to sf object (first add coordinates)
 stn_species_count <- stn_species_count %>% 
-  left_join(sk_locs, by = "location")
+  left_join(ede_locs, by = "location")
 
 sf_stn_spp <- st_as_sf(stn_species_count, coords = c("longitude", "latitude"), crs = 4326)
 glimpse(sf_stn_spp)
 
 
-## Read in and winter road as sf object
-sk_wr_sf <- st_read("data/study_area_spatial/sambaake_winter_road_shp.shp")
-## Create 20km buffer around winter road to generate basemap
-sk_wr_buffer <- st_buffer(sk_wr_sf, 20000)
+## Read in polygons as sf object
+list.files("data/study_area_spatial")
+ede_sf <- st_read("data/study_area_spatial/Edehzhie.shp")
+## Create 20km buffer around polygon to generate basemap
+ede_buffer <- st_buffer(ede_sf, 20000)
 
 # Create a basemap to extent of sk_wr_buffer
 # Load basemap (e.g., "World_Imagery" or "OpenTopoMap")
-basemap <- get_tiles(sk_wr_buffer, provider = "Esri.WorldTopoMap", crop = TRUE, zoom = 1) 
+basemap <- get_tiles(ede_buffer, provider = "Esri.WorldTopoMap", crop = TRUE, zoom = 8) 
 # note: higher resolution base imagery takes longer to download and display (but higher resolution better for smaller areas)
 
 
@@ -215,7 +233,7 @@ colnames(caribou_ct_sf) <- c("caribou_count", "geometry")
 
 caribou_det <- ggplot() +
   layer_spatial(basemap) + # add basemap
-  geom_sf(data = sk_wr_sf, linewidth = 1, color = "gray50") + # winter road
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # study area polygon
   geom_sf(
     data = caribou_ct_sf, ## add spatial detection data
     aes(size = caribou_count), # vary point size by count of detections
@@ -236,7 +254,7 @@ caribou_det <- ggplot() +
 win.graph()
 caribou_det
 
-ggsave("figures/sk_wr2022-2023_spatial_caribou_detections.png", caribou_det, width = 12, height = 8, dpi = 300)
+ggsave("figures/edehzhie2021-2022_spatial_caribou_detections.png", caribou_det, width = 12, height = 8, dpi = 300)
 
 ## moose counts
 moose_ct_sf <- sf_stn_spp %>% select(Moose)
@@ -244,7 +262,7 @@ colnames(moose_ct_sf) <- c("moose_count", "geometry")
 
 moose_det <- ggplot() +
   layer_spatial(basemap) + # add basemap
-  geom_sf(data = sk_wr_sf, linewidth = 1, color = "gray50") + # winter road
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # study area polygon
   geom_sf(
     data = moose_ct_sf, ## add spatial detection data
     aes(size = moose_count), # vary point size by count of detections
@@ -265,7 +283,40 @@ moose_det <- ggplot() +
 win.graph()
 moose_det
 
-ggsave("figures/sk_wr2022-2023_spatial_moose_detections.png", moose_det, width = 12, height = 8, dpi = 300)
+ggsave("figures/edehzhie2021-2022_spatial_moose_detections.png", moose_det, width = 12, height = 8, dpi = 300)
+
+## Bison counts
+bison_ct_sf <- sf_stn_spp %>% select(Bison)
+colnames(bison_ct_sf) <- c("bison_count", "geometry")
+
+bison_det <- ggplot() +
+  layer_spatial(basemap) + # add basemap
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # study area polygon
+  geom_sf(
+    data = bison_ct_sf, ## add spatial detection data
+    aes(size = bison_count), # vary point size by count of detections
+    color = "red3",
+    show.legend = TRUE) +
+  labs(x = "Longitude",
+       y = "Latitude",
+       size = "Bison count") +
+  theme_classic() +
+  # increase label sizes for axes titles and text
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 13)
+  )
+
+
+bison_det
+
+ggsave("figures/edehzhie2021-2022_spatial_bison_detections.png", moose_det, width = 12, height = 8, dpi = 300)
+
+
+
+###### GROUSE PLOTS NOT CREATED YET FOR EDEHZHIE
 
 ## Sharp-tailed grouse counts (won't do SPGR or WIPT for SKFN - only 1 detection each)
 stgr_ct_sf <- sf_stn_spp %>% select(`Sharp-tailed Grouse`)
