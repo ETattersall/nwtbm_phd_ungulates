@@ -330,9 +330,35 @@ bison_det
 
 ggsave("figures/edehzhie2021-2022_spatial_bison_detections.png", bison_det, width = 12, height = 8, dpi = 300)
 
+## Wolf counts
+Wolf_ct_sf <- sf_stn_spp %>% select(`Gray Wolf`)
+colnames(Wolf_ct_sf) <- c("Wolf_count", "geometry")
 
+Wolf_det <- ggplot() +
+  layer_spatial(basemap) + # add basemap
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # study area polygon
+  geom_sf(
+    data = Wolf_ct_sf, ## add spatial detection data
+    aes(size = Wolf_count), # vary point size by count of detections
+    color = "blue4",
+    show.legend = TRUE) +
+  labs(x = "Longitude",
+       y = "Latitude",
+       size = "Gray Wolf count") +
+  theme_classic() +
+  # increase label sizes for axes titles and text
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 13)
+  )
 
-###### GROUSE PLOTS NOT CREATED YET FOR EDEHZHIE
+win.graph()
+Wolf_det
+
+ggsave("figures/edehzhie2021-2022_spatial_wolf_detections.png", Wolf_det, width = 12, height = 8, dpi = 300)
+
 
 ## Sharp-tailed grouse counts
 stgr_ct_sf <- sf_stn_spp %>% select(`Sharp-tailed Grouse`)
