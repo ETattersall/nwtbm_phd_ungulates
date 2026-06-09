@@ -69,6 +69,15 @@ ede_camdata <- ede_camdata %>%
  mutate(location = location_std) %>% #converting wt station names to standardized names
   select(-location_std) # removing location_std column from lookup
 
+## Replace lat long in sk_camdata with coords from sk_locs. Add other columns from sk_locs too (except study_area)
+ede_camdata <- ede_camdata %>%
+  select(-latitude, -longitude) %>%   # remove incorrect coords
+  left_join(ede_locs %>% 
+              select(-study_area), # study_area column already exists
+            by = "location")
+
+glimpse(ede_camdata)
+
 
 ### Create independent detections from camera data, with a standard threshold of 30 minutes
 ede_det <- wt_ind_detect(ede_camdata,
@@ -83,6 +92,12 @@ ede_det <- ede_det %>%
 glimpse(ede_det)
 
 length(unique(ede_det$location)) #173 - should be 179. 6 stations didn't have any detections
+
+## Save standardized tags and independent detections
+write.csv(ede_camdata, "data/camera_data/edehzhie2021-2022_camera_tags.csv")
+write.csv(ede_det, "data/camera_data/edehzhie2021-2022_camera_detections_30min.csv")
+
+
 
 #### 1. Plot total detections of all species detected ####
 spp_count <- ede_det %>% 
@@ -237,7 +252,7 @@ caribou_det <- ggplot() +
   geom_sf(
     data = caribou_ct_sf, ## add spatial detection data
     aes(size = caribou_count), # vary point size by count of detections
-    color = "red3",
+    color = "blue4",
     show.legend = TRUE) +
   labs(x = "Longitude",
        y = "Latitude",
@@ -256,6 +271,7 @@ caribou_det
 
 ggsave("figures/edehzhie2021-2022_spatial_caribou_detections.png", caribou_det, width = 12, height = 8, dpi = 300)
 
+
 ## moose counts
 moose_ct_sf <- sf_stn_spp %>% select(Moose)
 colnames(moose_ct_sf) <- c("moose_count", "geometry")
@@ -266,7 +282,7 @@ moose_det <- ggplot() +
   geom_sf(
     data = moose_ct_sf, ## add spatial detection data
     aes(size = moose_count), # vary point size by count of detections
-    color = "red3",
+    color = "blue4",
     show.legend = TRUE) +
   labs(x = "Longitude",
        y = "Latitude",
@@ -295,7 +311,7 @@ bison_det <- ggplot() +
   geom_sf(
     data = bison_ct_sf, ## add spatial detection data
     aes(size = bison_count), # vary point size by count of detections
-    color = "red3",
+    color = "blue4",
     show.legend = TRUE) +
   labs(x = "Longitude",
        y = "Latitude",
@@ -312,23 +328,23 @@ bison_det <- ggplot() +
 
 bison_det
 
-ggsave("figures/edehzhie2021-2022_spatial_bison_detections.png", moose_det, width = 12, height = 8, dpi = 300)
+ggsave("figures/edehzhie2021-2022_spatial_bison_detections.png", bison_det, width = 12, height = 8, dpi = 300)
 
 
 
 ###### GROUSE PLOTS NOT CREATED YET FOR EDEHZHIE
 
-## Sharp-tailed grouse counts (won't do SPGR or WIPT for SKFN - only 1 detection each)
+## Sharp-tailed grouse counts
 stgr_ct_sf <- sf_stn_spp %>% select(`Sharp-tailed Grouse`)
 colnames(stgr_ct_sf) <- c("stgr_count", "geometry")
 
 stgr_det <- ggplot() +
   layer_spatial(basemap) + # add basemap
-  geom_sf(data = sk_wr_sf, linewidth = 1, color = "gray50") + # winter road
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # winter road
   geom_sf(
     data = stgr_ct_sf, ## add spatial detection data
     aes(size = stgr_count), # vary point size by count of detections
-    color = "red3",
+    color = "blue4",
     show.legend = TRUE) +
   labs(x = "Longitude",
        y = "Latitude",
@@ -345,7 +361,96 @@ stgr_det <- ggplot() +
 win.graph()
 stgr_det
 
-ggsave("figures/sk_wr2022-2023_spatial_stgr_detections.png", stgr_det, width = 12, height = 8, dpi = 300)
+ggsave("figures/edehzhie2021-2022_spatial_stgr_detections.png", stgr_det, width = 12, height = 8, dpi = 300)
+
+## Spruce grouse counts
+spgr_ct_sf <- sf_stn_spp %>% select(`Spruce Grouse`)
+colnames(spgr_ct_sf) <- c("spgr_count", "geometry")
+
+spgr_det <- ggplot() +
+  layer_spatial(basemap) + # add basemap
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # winter road
+  geom_sf(
+    data = spgr_ct_sf, ## add spatial detection data
+    aes(size = spgr_count), # vary point size by count of detections
+    color = "blue4",
+    show.legend = TRUE) +
+  labs(x = "Longitude",
+       y = "Latitude",
+       size = "Spruce Grouse count") +
+  theme_classic() +
+  # increase label sizes for axes titles and text
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 13)
+  )
+
+win.graph()
+spgr_det
+
+ggsave("figures/edehzhie2021-2022_spatial_spgr_detections.png", spgr_det, width = 12, height = 8, dpi = 300)
+
+## Ruffed grouse counts
+rugr_ct_sf <- sf_stn_spp %>% select(`Ruffed Grouse`)
+colnames(rugr_ct_sf) <- c("rugr_count", "geometry")
+
+rugr_det <- ggplot() +
+  layer_spatial(basemap) + # add basemap
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # winter road
+  geom_sf(
+    data = rugr_ct_sf, ## add spatial detection data
+    aes(size = rugr_count), # vary point size by count of detections
+    color = "blue4",
+    show.legend = TRUE) +
+  labs(x = "Longitude",
+       y = "Latitude",
+       size = "Ruffed Grouse count") +
+  theme_classic() +
+  # increase label sizes for axes titles and text
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 13)
+  )
+
+win.graph()
+rugr_det
+
+
+ggsave("figures/edehzhie2021-2022_spatial_rugr_detections.png", stgr_det, width = 12, height = 8, dpi = 300)
+
+### Wolf counts
+wolf_ct_sf <- sf_stn_spp %>% select(`Gray Wolf`)
+colnames(wolf_ct_sf) <- c("wolf_count", "geometry")
+
+wolf_det <- ggplot() +
+  layer_spatial(basemap) + # add basemap
+  geom_sf(data = ede_sf, linewidth = 1, color = "black", fill = NA) + # winter road
+  geom_sf(
+    data = wolf_ct_sf, ## add spatial detection data
+    aes(size = wolf_count), # vary point size by count of detections
+    color = "blue4",
+    show.legend = TRUE) +
+  labs(x = "Longitude",
+       y = "Latitude",
+       size = "Gray Wolf count") +
+  theme_classic() +
+  # increase label sizes for axes titles and text
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 13)
+  )
+
+win.graph()
+wolf_det
+
+
+ggsave("figures/edehzhie2021-2022_spatial_wolf_detections.png", stgr_det, width = 12, height = 8, dpi = 300)
 
 
 
