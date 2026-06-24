@@ -69,7 +69,7 @@ ede_camdata <- ede_camdata %>%
  mutate(location = location_std) %>% #converting wt station names to standardized names
   select(-location_std) # removing location_std column from lookup
 
-## Replace lat long in sk_camdata with coords from sk_locs. Add other columns from sk_locs too (except study_area)
+## Replace lat long in ede_camdata with coords from ede_locs. Add other columns from ede_locs too (except study_area)
 ede_camdata <- ede_camdata %>%
   select(-latitude, -longitude) %>%   # remove incorrect coords
   left_join(ede_locs %>% 
