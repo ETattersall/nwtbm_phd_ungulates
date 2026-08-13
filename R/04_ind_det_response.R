@@ -148,6 +148,16 @@ glimpse(cam_det)
 write.csv(std_data_df, "data/camera_data/nwtbm_allprojects_camera_tags.csv")
 write.csv(cam_det, "data/camera_data/nwtbm_allprojects_camera_detections_30min.csv")
 
+## Generate number of detections per station by month for ungulates
+ung_spp <- c("Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Caribou")
+
+ung_data <- cam_det |> filter(species_common_name %in% ung_spp)
+glimpse(ung_data)
+class(ung_data$start_time)
+
+
+
+
 #### 1. Plot total detections of all species detected ####
 spp_count <- cam_det %>% 
   group_by(study_area, species_common_name) %>% # group by study area so these can be plotted separately
@@ -348,6 +358,9 @@ spp_naive_summary <- spp_naive_long %>%
   summarise(naive_occupancy = mean(detection), .groups = "drop") %>% # mean of detection column gives the proportion of locations with detections (naive occupancy)
   arrange(desc(naive_occupancy))
 
+## Remove rows with 0 occupancy
+spp_naive_summary <- spp_naive_summary |> filter(naive_occupancy > 0)
+
 ## Plot naive occupancy for all study areas separately (Ede and SK plots didn't include missing sites)
 
 ### Edehzhie
@@ -480,9 +493,6 @@ ggsave("figures/Gameti_allspecies_naiveoccupancy_2023-2024.png", gam_naiocc, wid
 
 #### Ungulate only naive occupancy
 ung_naiocc <- spp_naive_summary |> filter(species_common_name %in% ung_spp)
-# includes rows for no occupancy areas - remove these?
-
-ung_naiocc <- ung_naiocc |> filter(naive_occupancy > 0)
 
 ung_naiocc_plot <- ggplot(ung_naiocc,
                      aes(x = naive_occupancy, y = fct_reorder(species_common_name, naive_occupancy))) + # re-orders species into descending naive_occupancy
