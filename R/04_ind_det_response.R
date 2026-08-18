@@ -40,6 +40,8 @@ raw_data1 <- wt_download_report(project_id = cam_projects$project_id[1:3],
                                   sensor_id = "CAM",
                                   report = "main") # main reports include ALL DATA
 
+
+
 ## Download raw data for next 3 projects
 raw_data2 <- wt_download_report(project_id = cam_projects$project_id[4:6],
                                 sensor_id = "CAM",
@@ -123,6 +125,56 @@ std_data_df <- std_data_df %>%
 
 glimpse(std_data_df)
 
+#### Calculating camera effort from std_data_df
+## Wildtrax has a function for summarising camera data for analysis that will calculate survey effort based on image_date_time and image_fov.
+## Aug 14 - 18: Untagged timelapse images tagged, FOVs revised for images outside of deployment
+## However, there are still known errors in 2 Edehzhie cameras when the date_time recorded by the camera is incorrect
+
+## Check max and min start time for each study area and location, look for dates outside of known deployment
+dep_time_summary <- std_data_df |> 
+  group_by(study_area, location) |> 
+  summarise(loc_first_date_time = min(image_date_time),
+            loc_last_date_time = max(image_date_time))
+
+
+## Edehzhie cameras with incorrect date/times:
+## ENWA-O-09-02: deployed Nov 8 2021 @ 10:57, retrieved Nov 6 2022 @ 10:33. Camera says deployed Jan 1 2020 @ 01:12:32, retrieved Dec 29 2020 @ 00:56:33
+## ENWA-O-15-03: deployed Nov 7 2021 @ 15:51, retrieved Oct 23 2022 @ 12:33. Camera says deployed Jan 7 2022 @ 15:59:24, retrieved Dec 23 2022 @ 11:31:33 (for simplicity, assume time on camera is correct)
+
+## Correcting these date/time errors - assume the first image from each deployment matches the deployment time
+## Calculate the offset for each cam in a tibble
+
+cam_corrections <- tibble(
+  location = c("ENWA-O-09-02", "ENWA-O-15-03"),
+  offset = c(
+    ymd_hms("2021-11-08 10:57:00") - ymd_hms("2020-01-01 01:12:32"),
+    ymd_hms("2021-11-07 15:59:24") - ymd_hms("2022-01-07 15:59:24")
+  )
+)
+
+class(cam_corrections$offset) ##difftime
+class(std_data_df$image_date_time)
+
+## Correct image_date_time by left joining cam_corrections and adding the offset (which only applies to the 2 cams)
+std_data_df2 <- std_data_df |> 
+  left_join(cam_corrections, by = "location") |> 
+  mutate(
+    offset = replace_na(offset, as.difftime(0, units = "secs")),
+    image_date_time = image_date_time + offset
+  ) |> 
+  select(-offset)
+
+## Check deployment start and end for affected cams
+cam_correct_check <- std_data_df2 |>
+  filter(location == "ENWA-O-09-02" | 
+         location == "ENWA-O-15-03") |> 
+  group_by(study_area, location) |> 
+  summarise(loc_first_date_time = min(image_date_time),
+            loc_last_date_time = max(image_date_time)) ##corrected :)
+
+std_data_df <- std_data_df2
+
+glimpse(std_data_df)
 
 ### Create independent detections from camera data, with a standard threshold of 30 minutes
 cam_det <- wt_ind_detect(std_data_df,
@@ -148,15 +200,32 @@ glimpse(cam_det)
 write.csv(std_data_df, "data/camera_data/nwtbm_allprojects_camera_tags.csv")
 write.csv(cam_det, "data/camera_data/nwtbm_allprojects_camera_detections_30min.csv")
 
-## Generate number of detections per station by month for ungulates
+## remove rawest forms of data and duplicates to save space
+rm(raw_data, raw_data1, raw_data2, std_data_df2)
+
+## Isolating ungulates
 ung_spp <- c("Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Caribou")
 
 ung_data <- cam_det |> filter(species_common_name %in% ung_spp)
 glimpse(ung_data)
-class(ung_data$start_time)
 
+## Calculating station-month detection summaries with wt_summarise_cam
+det_mon <- wt_summarise_cam(
+  detect_data = cam_det,
+  raw_data = std_data_df, ## including raw data so effort per period can be calculated
+  time_interval = "month",
+  variable = "detections",
+  exclude_out_of_range = TRUE, # IMPORTANT: Remove days from effort when image is tagged 'out of FOV' 
+  project_col = study_area # include study area as project
+  )
 
+glimpse(det_mon)
 
+## All stations?
+length(unique(det_mon$location)) # yes, including stations with no detections
+
+## Save number of detections by month
+write.csv(det_mon, "data/camera_data/nwtbm_allprojects_detections_by_month.csv")
 
 #### 1. Plot total detections of all species detected ####
 spp_count <- cam_det %>% 
