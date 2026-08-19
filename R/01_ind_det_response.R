@@ -13,7 +13,6 @@ lapply(list.of.packages, require, character.only = TRUE)
 ## Needed to download station locations
 library(wildrtrax)
 
-packageVersion("wildrtrax")
 
 ## Authenticate into WildTrax. Access local script for WT_USERNAME and WT_PASSWORD (wildtrax_login.R - not shared on GitHub)
 source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME and WTPASSWORD
