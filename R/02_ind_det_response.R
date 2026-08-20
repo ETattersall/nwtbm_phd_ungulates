@@ -19,167 +19,120 @@ source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME
 wt_auth()
 
 
-## Get project information for my WildTrax projects
-cam_projects <- wt_get_projects("CAM")
+##### MOVED from deployment script, needs to be checked ####
+### Load raw data and independent detections generated in 01_ind_det_response.R
+std_data <- read.csv("data/camera_data/nwtbm_allprojects_camera_tags.csv")
 
 
-## Filter to my target projects only, using project IDs: 712 (Thaidene Nene), 2183 (Fort Smith), 2102 (Norman Wells), 1906 (Sambaa K'e), 2935 (Gameti), 1465 (Edehzhie)
-cam_projects <- cam_projects %>% filter(project_id == "712" |
-                                          project_id == "2183" |
-                                          project_id == "2102" |
-                                          project_id == "1906" |
-                                          project_id == "2935" |
-                                          project_id == "1465")
+## Set as data.tables (for large datasets)
+setDT(std_data)
+setDT(cam_det)
 
-## Likely won't be able to download all 6 at same time - try downloading 2 batches of 3
-cam_projects$project_id[1:3]
+glimpse(std_data)
+## class of date/time data?
+class(std_data$image_date_time) # character
+table(is.na(std_data$image_date_time)) ## No NAs in CSV for image_date_time
 
-## Download raw data for 3 projects
-raw_data1 <- wt_download_report(project_id = cam_projects$project_id[1:3],
-                                  sensor_id = "CAM",
-                                  report = "main") # main reports include ALL DATA
+glimpse(cam_det)
+class(cam_det$start_time) #character.
 
+## Re-format date time data
+std_data2 <- std_data |> 
+  mutate(image_date_time = ymd_hms(image_date_time)) # warning that 66 failed to parse. results in NAs?
 
+class(std_data2$image_date_time) # POSIX now
+summary(std_data2$image_date_time) # yes, 66 NAs
 
-## Download raw data for next 3 projects
-raw_data2 <- wt_download_report(project_id = cam_projects$project_id[4:6],
-                                sensor_id = "CAM",
-                                report = "main") # main reports include ALL DATA
+## Find rows with bad dates
+failed_rows <- std_data %>%
+  semi_join(
+    std_data2 %>%
+      filter(is.na(image_date_time)) %>%
+      select(image_id),
+    by = "image_id"
+  ) ## the NA rows only have date information, no time (yyyy-mm-dd)
 
-## results in lists of dataframes - rename each df (will pull names as study_area later). Check objects for order - not in same order as above!
-names(raw_data1) <- c("NormanWells", "FortSmith", "ThaideneNëné")
-names(raw_data2) <- c("Edéhzhíe", "SambaaK'e", "Gameti")
-
-glimpse(raw_data2$Gameti)
-
-## Combine the lists, then bind those dfs and add df names in a study_area column (.id argument)
-raw_data <- c(raw_data1,raw_data2)
-raw_data_df <- bind_rows(raw_data, .id = "study_area")
-glimpse(raw_data_df)
-
-## How many total locations?
-length(unique(raw_data_df$location)) # 732
-unique(raw_data_df$location)
-
-## Location names need to be standardized and coordinates added
-stn_lookup <- read.csv("data/nwtbm_station_name_lookup_table.csv")
-
-glimpse(stn_lookup)
-length(unique(stn_lookup$location_std))
-
-## Remove column X and study_area (already added to wt data above)
-stn_lookup <- stn_lookup %>% select(-X, -study_area)
-
-## Remove duplicate rows
-stn_lookup <- distinct(stn_lookup)
-
-## Load location data to add station coordinates
-cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
-glimpse(cam_locs)
-
-## Remove column X
-cam_locs <- cam_locs %>% select(-X)
-
-## Join lookup to raw_data then convert location to location_std
-std_data_df <- raw_data_df |> 
-  left_join(stn_lookup, by = c("location" = "location_wt")) |> 
-  mutate(location = location_std) |>  #converting wt station names to standardized names
-  select(-location_std) # removing location_std column from lookup
-
-length(unique(std_data_df$location)) #717 
-glimpse(std_data_df)
-
-## Which stations are in std_data_df and not in cam_locs (15?)?
-std_data_locs <- unique(std_data_df$location)
-missing_locs <- setdiff(cam_locs$location, std_data_locs)
-missing_locs # Looks like some of the missing locations might be because the lookup table is inaccurate for the WildTrax Fort Smith stations deployed by FSMC (suffix dropped before WT names recorded maybe?)
-## Ideally I'd go back to 02_merge_station_locations.R and fix there, but since it appears to only be the FSMC camera sites, I will fix the WildTrax location names manually in the station lookup table
-
-## Re-load new lookup table
-stn_lookup <- read.csv("data/nwtbm_station_name_lookup_table_20260812.csv")
-
-glimpse(stn_lookup)
-length(unique(stn_lookup$location_std))
-
-## Remove column X and study_area (already added to wt data above)
-stn_lookup <- stn_lookup %>% select(-X, -study_area)
-
-## Remove duplicate rows
-stn_lookup <- distinct(stn_lookup)
-
-## Join lookup to raw_data then convert location to location_std
-std_data_df <- raw_data_df |> 
-  left_join(stn_lookup, by = c("location" = "location_wt")) |> 
-  mutate(location = location_std) |>  #converting wt station names to standardized names
-  select(-location_std) # removing location_std column from lookup
-
-length(unique(std_data_df$location)) #732 - all locations now represented in standard data 
-
-## Replace lat long in std_data_df with coords from cam_locs. Add other columns from cam_locs too (except study_area)
-std_data_df <- std_data_df %>%
-  select(-latitude, -longitude) %>%   # remove incorrect coords
-  left_join(cam_locs %>% 
-              select(-study_area), # study_area column already exists
-            by = "location")
-
-glimpse(std_data_df)
-
-#### Calculating camera effort from std_data_df
-## Wildtrax has a function for summarising camera data for analysis that will calculate survey effort based on image_date_time and image_fov.
-## Aug 14 - 18: Untagged timelapse images tagged, FOVs revised for images outside of deployment
-## However, there are still known errors in 2 Edehzhie cameras when the date_time recorded by the camera is incorrect
-
-## Check max and min start time for each study area and location, look for dates outside of known deployment
-dep_time_summary <- std_data_df |> 
-  group_by(study_area, location) |> 
-  summarise(loc_first_date_time = min(image_date_time),
-            loc_last_date_time = max(image_date_time))
-
-
-## Edehzhie cameras with incorrect date/times:
-## ENWA-O-09-02: deployed Nov 8 2021 @ 10:57, retrieved Nov 6 2022 @ 10:33. Camera says deployed Jan 1 2020 @ 01:12:32, retrieved Dec 29 2020 @ 00:56:33
-## ENWA-O-15-03: deployed Nov 7 2021 @ 15:51, retrieved Oct 23 2022 @ 12:33. Camera says deployed Jan 7 2022 @ 15:59:24, retrieved Dec 23 2022 @ 11:31:33 (for simplicity, assume time on camera is correct)
-
-## Correcting these date/time errors - assume the first image from each deployment matches the deployment time
-## Calculate the offset for each cam in a tibble
-
-cam_corrections <- tibble(
-  location = c("ENWA-O-09-02", "ENWA-O-15-03"),
-  offset = c(
-    ymd_hms("2021-11-08 10:57:00") - ymd_hms("2020-01-01 01:12:32"),
-    ymd_hms("2021-11-07 15:59:24") - ymd_hms("2022-01-07 15:59:24")
-  )
-)
-
-class(cam_corrections$offset) ##difftime
-class(std_data_df$image_date_time)
-
-## Correct image_date_time by left joining cam_corrections and adding the offset (which only applies to the 2 cams)
-std_data_df2 <- std_data_df |> 
-  left_join(cam_corrections, by = "location") |> 
+## Re-format date times with parse_date_time
+std_data2 <- std_data %>%
   mutate(
-    offset = replace_na(offset, as.difftime(0, units = "secs")),
-    image_date_time = image_date_time + offset
+    image_date_time = parse_date_time(
+      image_date_time,
+      orders = c(
+        "ymd HMS",  # 2023-05-18 14:23:01
+        "ymd"       # 2023-05-18
+      )
+    )
+  )
+class(std_data2$image_date_time) # POSIX now
+summary(std_data2$image_date_time) # no NAs
+
+## Do the same with cam_det start time and end time (which is based off of std_data, so should have the same formats)
+cam_det2 <- cam_det %>%
+  mutate(
+    start_time = parse_date_time(
+      start_time,
+      orders = c(
+        "ymd HMS",  # 2023-05-18 14:23:01
+        "ymd"       # 2023-05-18
+      )
+    )
   ) |> 
-  select(-offset)
+  mutate(
+    end_time = parse_date_time(
+      end_time,
+      orders = c(
+        "ymd HMS",  # 2023-05-18 14:23:01
+        "ymd"       # 2023-05-18
+      )
+    )
+  )
 
-## Check deployment start and end for affected cams
-cam_correct_check <- std_data_df2 |>
-  filter(location == "ENWA-O-09-02" | 
-         location == "ENWA-O-15-03") |> 
-  group_by(study_area, location) |> 
-  summarise(loc_first_date_time = min(image_date_time),
-            loc_last_date_time = max(image_date_time)) ##corrected :)
+class(cam_det2$start_time)
+class(cam_det2$end_time) # both POSIX
+summary(cam_det2$start_time)
+summary(cam_det2$end_time) # no NAs
 
-std_data_df <- std_data_df2
+# Re-name back to originals
+std_data <- std_data2
+cam_det <- cam_det2
 
-glimpse(std_data_df)
+## Remove copies to save space
+rm(std_data2, cam_det2, failed_rows)
+
+## remove any duplicate rows
+std_data <- distinct(std_data)
+
+# ## Generate a lookup table of study area, location, and survey effort using wt_summarise_cam in wildrtrax
+# # will also calculate species presence/not detected, though not the focus of this exercise
+# 
+# # Can't generate for all data together - split it by study area
+# study_area <- unique(cam_det$study_area)
+# 
+# # Create a list of efforts by study area
+# eff_list <- lapply(study_area, function(p) {
+#   wt_summarise_cam(
+#     detect_data = dplyr::filter(cam_det, study_area == p),
+#     raw_data = dplyr::filter(std_data, study_area == p),
+#     time_interval = "full",
+#     variable = "presence",
+#     exclude_out_of_range = TRUE,
+#     project_col = study_area
+#   )
+# })
+# 
+# ## bind together
+# eff <- bind_rows(eff_list)
+# glimpse(eff)
+# 
+# ## Doesn't even give survey effort!!!
+
+####### Check script flow from above script to below (copy-pasted) #####
 
 ### Create independent detections from camera data, with a standard threshold of 30 minutes
-cam_det <- wt_ind_detect(std_data_df,
-                        threshold = 30,
-                        units = "minutes",
-                        remove_human = TRUE) # removes humans and vehicles
+cam_det <- wt_ind_detect(std_data,
+                         threshold = 30,
+                         units = "minutes",
+                         remove_human = TRUE) # removes humans and vehicles
 glimpse(cam_det)
 unique(cam_det$species_common_name) #106 different species
 length(unique(cam_det$location)) #717 - so not all 732 locations in cam_locs. What is the difference?
@@ -195,12 +148,7 @@ cam_det <- cam_det %>%
   left_join(cam_locs, by = "location")
 glimpse(cam_det)
 
-## Save std_data_df and cam_det
-write.csv(std_data_df, "data/camera_data/nwtbm_allprojects_camera_tags.csv")
 write.csv(cam_det, "data/camera_data/nwtbm_allprojects_camera_detections_30min.csv")
-
-## remove rawest forms of data and duplicates to save space
-rm(raw_data, raw_data1, raw_data2, std_data_df2)
 
 ## Isolating ungulates
 ung_spp <- c("Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Caribou")
