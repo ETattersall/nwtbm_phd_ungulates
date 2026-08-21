@@ -11,8 +11,10 @@ list.of.packages <- c("tidyverse", "sf", "maptiles", "ggspatial", "terra","kable
 lapply(list.of.packages, require, character.only = TRUE)
 
 ## Needed to download station locations
-## remotes::install_github("ABbiodiversity/wildrtrax") ## May need to create a new personal access token to retrieve from github
+## remotes::install_github("ABbiodiversity/wildrtrax", force = TRUE) ## May need to create a new personal access token to retrieve from github
 library(wildrtrax)
+
+packageVersion("wildrtrax")
 
 ## Authenticate into WildTrax. Access local script for WT_USERNAME and WT_PASSWORD (wildtrax_login.R - not shared on GitHub)
 source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME and WTPASSWORD
@@ -24,19 +26,19 @@ wt_auth()
 ## Get project information for my WildTrax projects
 cam_projects <- wt_get_projects("CAM")
 
-## Check for project of interest (Edehzhie - project ID = 1465)
+## Check for project of interest (TDN - project ID = 712)
 
-## Download single project data - Edehzhie tags
-ede_camdata <- wt_download_report(project_id = 1465,
+## Download single project data - TDN tags
+tdn_camdata <- wt_download_report(project_id = 712,
                                sensor_id = "CAM",
                                report = "main") # main reports include ALL DATA
 
-glimpse(ede_camdata)
-summary(ede_camdata)
+glimpse(tdn_camdata)
+summary(tdn_camdata)
 
 ## Do all stations have detections?
-length(unique(ede_camdata$location)) #177 
-table(is.na(ede_camdata$location))
+length(unique(tdn_camdata$location)) #307
+table(is.na(tdn_camdata$location))
 
 ### Load station lookup table to correct names from WildTrax
 stn_lookup <- read.csv("data/nwtbm_station_name_lookup_table.csv")
@@ -48,59 +50,60 @@ stn_lookup <- stn_lookup %>% select(-X)
 
 
 ## Load location data to add station coordinates
-cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
+cam_locs <- read.csv("data/sensor_locations/nwtbm_cam_locations_20260506.csv")
 glimpse(cam_locs)
 
 ## Remove column X
 cam_locs <- cam_locs %>% select(-X)
 
-## Filter to Edehzhie cameras only
-ede_locs <- cam_locs %>% filter(study_area == "Edéhzhíe")
+## Filter to TDN cameras only
+tdn_locs <- cam_locs %>% filter(study_area == "ThaideneNëné")
 
 ## Correct tag data location names using stn_lookup
 # Filter lookup to relevant project
-ede_lookup <- stn_lookup %>% filter(study_area == "Edéhzhíe")
+tdn_lookup <- stn_lookup %>% filter(study_area == "ThaideneNëné")
 
 
 ## Join the lookup to the tag data by location and location_wt, then convert location to location_std
-ede_camdata <- ede_camdata %>%
-  left_join(ede_lookup,
-            by = c("location" = "location_wt")) %>% # indicating that the multiple rows in the lookup table will match multiple rows in ede_camdata
+tdn_camdata <- tdn_camdata %>%
+  left_join(tdn_lookup,
+            by = c("location" = "location_wt")) %>% # indicating that the multiple rows in the lookup table will match multiple rows in tdn_camdata
  mutate(location = location_std) %>% #converting wt station names to standardized names
   select(-location_std) # removing location_std column from lookup
 
-## Replace lat long in ede_camdata with coords from ede_locs. Add other columns from ede_locs too (except study_area)
-ede_camdata <- ede_camdata %>%
+## Replace lat long in tdn_camdata with coords from tdn_locs. Add other columns from tdn_locs too (except study_area)
+tdn_camdata <- tdn_camdata %>%
   select(-latitude, -longitude) %>%   # remove incorrect coords
-  left_join(ede_locs %>% 
+  left_join(tdn_locs %>% 
               select(-study_area), # study_area column already exists
             by = "location")
 
-glimpse(ede_camdata)
+glimpse(tdn_camdata)
 
 
 ### Create independent detections from camera data, with a standard threshold of 30 minutes
-ede_det <- wt_ind_detect(ede_camdata,
+tdn_det <- wt_ind_detect(tdn_camdata,
                         threshold = 30,
                         units = "minutes")
-glimpse(ede_det)
+glimpse(tdn_det)
 
 
 ## Add location coordinates to detection data
-ede_det <- ede_det %>% 
+tdn_det <- tdn_det %>% 
   left_join(cam_locs, by = "location")
-glimpse(ede_det)
+glimpse(tdn_det)
 
-length(unique(ede_det$location)) #173 - should be 179. 6 stations didn't have any detections
+length(unique(tdn_det$location)) #305 - should be 307. 2 stations didn't have any detections
 
 ## Save standardized tags and independent detections
-write.csv(ede_camdata, "data/camera_data/edehzhie2021-2022_camera_tags.csv")
-write.csv(ede_det, "data/camera_data/edehzhie2021-2022_camera_detections_30min.csv")
+write.csv(tdn_camdata, "data/camera_data/tdn2021-2022_camera_tags.csv")
+write.csv(tdn_det, "data/camera_data/tdn2021-2022_camera_detections_30min.csv")
 
 
+##### 29 June 2026 - no plotting done for TDN yet
 
 #### 1. Plot total detections of all species detected ####
-spp_count <- ede_det %>% 
+spp_count <- tdn_det %>% 
   group_by(species_common_name) %>% 
   summarise(count = n()) %>% 
   arrange(desc(count)) %>% ## descending order of detections
