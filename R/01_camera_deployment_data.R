@@ -1,6 +1,6 @@
 ###########################
-## 02_camera_deployment_data.R
-## Exploring camera deployment data and calculating survey effort
+## 01_camera_deployment_data.R
+## Downloading raw WildTrax data, post-processing of date/time and FOV errors, and checking camera activity
 ## Started on Mar 12 2026, updated August 2026
 ## Created by Erin Tattersall
 ###########################
