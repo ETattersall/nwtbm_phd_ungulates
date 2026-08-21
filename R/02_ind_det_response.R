@@ -1,5 +1,5 @@
 #############################################
-## 04_ind_det_response.R
+## 02_ind_det_response.R
 ## Downloading and summarizing into no. of independent detections
 ## for all NWTBMP projects
 ## Started on August 12 2026
@@ -7,7 +7,7 @@
 #############################################
 
 
-list.of.packages <- c("tidyverse", "sf", "maptiles", "ggspatial", "terra","kableExtra", "leaflet", "viridis", "corrplot", "lubridate", "plotly", "ggplot2", "ggbreak")
+list.of.packages <- c("tidyverse", "data.table", "lubridate", "plotly", "ggplot2", "ggbreak")
 lapply(list.of.packages, require, character.only = TRUE)
 
 ## Needed to download station locations
@@ -19,29 +19,28 @@ source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME
 wt_auth()
 
 
-##### MOVED from deployment script, needs to be checked ####
-### Load raw data and independent detections generated in 01_ind_det_response.R
+### Load raw data generated in 01_ind_det_response.R
 std_data <- read.csv("data/camera_data/nwtbm_allprojects_camera_tags.csv")
+## Load camera location data
+cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
 
 
 ## Set as data.tables (for large datasets)
 setDT(std_data)
-setDT(cam_det)
+
 
 glimpse(std_data)
 ## class of date/time data?
-class(std_data$image_date_time) # character
+class(std_data$image_date_time) # character - loses POSIX format when saved as CSV
 table(is.na(std_data$image_date_time)) ## No NAs in CSV for image_date_time
 
-glimpse(cam_det)
-class(cam_det$start_time) #character.
 
 ## Re-format date time data
 std_data2 <- std_data |> 
-  mutate(image_date_time = ymd_hms(image_date_time)) # warning that 66 failed to parse. results in NAs?
+  mutate(image_date_time = ymd_hms(image_date_time)) # warning that 66 failed to parse. Might be different date formats present
 
 class(std_data2$image_date_time) # POSIX now
-summary(std_data2$image_date_time) # yes, 66 NAs
+summary(std_data2$image_date_time) # 66 NAs
 
 ## Find rows with bad dates
 failed_rows <- std_data %>%
@@ -66,69 +65,43 @@ std_data2 <- std_data %>%
 class(std_data2$image_date_time) # POSIX now
 summary(std_data2$image_date_time) # no NAs
 
-## Do the same with cam_det start time and end time (which is based off of std_data, so should have the same formats)
-cam_det2 <- cam_det %>%
-  mutate(
-    start_time = parse_date_time(
-      start_time,
-      orders = c(
-        "ymd HMS",  # 2023-05-18 14:23:01
-        "ymd"       # 2023-05-18
-      )
-    )
-  ) |> 
-  mutate(
-    end_time = parse_date_time(
-      end_time,
-      orders = c(
-        "ymd HMS",  # 2023-05-18 14:23:01
-        "ymd"       # 2023-05-18
-      )
-    )
-  )
-
-class(cam_det2$start_time)
-class(cam_det2$end_time) # both POSIX
-summary(cam_det2$start_time)
-summary(cam_det2$end_time) # no NAs
+# ## Do the same with cam_det start time and end time (which is based off of std_data, so should have the same formats)
+# cam_det2 <- cam_det %>%
+#   mutate(
+#     start_time = parse_date_time(
+#       start_time,
+#       orders = c(
+#         "ymd HMS",  # 2023-05-18 14:23:01
+#         "ymd"       # 2023-05-18
+#       )
+#     )
+#   ) |> 
+#   mutate(
+#     end_time = parse_date_time(
+#       end_time,
+#       orders = c(
+#         "ymd HMS",  # 2023-05-18 14:23:01
+#         "ymd"       # 2023-05-18
+#       )
+#     )
+#   )
+# 
+# class(cam_det2$start_time)
+# class(cam_det2$end_time) # both POSIX
+# summary(cam_det2$start_time)
+# summary(cam_det2$end_time) # no NAs
 
 # Re-name back to originals
 std_data <- std_data2
-cam_det <- cam_det2
+
 
 ## Remove copies to save space
-rm(std_data2, cam_det2, failed_rows)
+rm(std_data2, failed_rows)
 
 ## remove any duplicate rows
 std_data <- distinct(std_data)
 
-# ## Generate a lookup table of study area, location, and survey effort using wt_summarise_cam in wildrtrax
-# # will also calculate species presence/not detected, though not the focus of this exercise
-# 
-# # Can't generate for all data together - split it by study area
-# study_area <- unique(cam_det$study_area)
-# 
-# # Create a list of efforts by study area
-# eff_list <- lapply(study_area, function(p) {
-#   wt_summarise_cam(
-#     detect_data = dplyr::filter(cam_det, study_area == p),
-#     raw_data = dplyr::filter(std_data, study_area == p),
-#     time_interval = "full",
-#     variable = "presence",
-#     exclude_out_of_range = TRUE,
-#     project_col = study_area
-#   )
-# })
-# 
-# ## bind together
-# eff <- bind_rows(eff_list)
-# glimpse(eff)
-# 
-# ## Doesn't even give survey effort!!!
-
-####### Check script flow from above script to below (copy-pasted) #####
-
-### Create independent detections from camera data, with a standard threshold of 30 minutes
+### Create independent detections from raw camera data, with a standard threshold of 30 minutes
 cam_det <- wt_ind_detect(std_data,
                          threshold = 30,
                          units = "minutes",
@@ -156,10 +129,15 @@ ung_spp <- c("Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Cari
 ung_data <- cam_det |> filter(species_common_name %in% ung_spp)
 glimpse(ung_data)
 
+## isolating game birds - also include column Ptarmigans (ID'd to Genus only)
+gb_spp <- c("Ptarmigans", "Rock Ptarmigan", "Ruffed Grouse", "Sharp-tailed Grouse", "Spruce Grouse", "Willow Ptarmigan")
+
+gb_data <- cam_det |> filter(species_common_name %in% gb_spp)
+
 ## Calculating station-month detection summaries with wt_summarise_cam
 det_mon <- wt_summarise_cam(
   detect_data = cam_det,
-  raw_data = std_data_df, ## including raw data so effort per period can be calculated
+  raw_data = std_data, ## including raw data so effort per period can be calculated
   time_interval = "month",
   variable = "detections",
   exclude_out_of_range = TRUE, # IMPORTANT: Remove days from effort when image is tagged 'out of FOV' 
@@ -171,8 +149,57 @@ glimpse(det_mon)
 ## All stations?
 length(unique(det_mon$location)) # yes, including stations with no detections
 
-## Save number of detections by month
-write.csv(det_mon, "data/camera_data/nwtbm_allprojects_detections_by_month.csv")
+## add station data from cam_locs
+det_mon <- det_mon |> select(-study_area) #remove study area, since this is included in cam_locs
+det_mon <- cam_locs |> # station data should be before detection data
+  left_join(det_mon, by = "location")
+
+glimpse(det_mon)
+
+# Adding season to monthly data, with June - July as summer and October - May as winter (snow-free/snow)
+ det_mon <- det_mon %>%
+  mutate(
+    month = as.character(month),
+    season = case_when(
+      month %in% c("June", "July", "August", "September") ~ "Summer",
+      month %in% c("October", "November", "December", "January", "February", 
+                   "March", "April", "May") ~ "Winter",
+      TRUE ~ NA_character_),
+    season = factor(season, levels = c("Summer", "Winter")))
+
+ glimpse(det_mon)
+
+ ## Save number of detections by month
+write.csv(det_mon, "data/camera_data/nwtbm_allspecies_detections_by_month.csv")
+
+## Save ungulates and gamebirds
+## ungulates
+ung_mon <- det_mon |> 
+  relocate(season, .before = all_of(ung_spp)) |>    # move season before ungulate columns
+  select(
+    study_area, location, latitude, longitude,
+    sensor_type, site, year, month, n_days_effort,
+    season,
+    all_of(ung_spp)
+  )
+
+glimpse(ung_mon)
+## save
+write.csv(ung_mon, "data/camera_data/nwtbm_ungulate_detections_by_month.csv")
+
+## Save game birds
+gb_mon <- det_mon |> 
+  relocate(season, .before = all_of(gb_spp)) |>    # move season before game bird columns
+  select(
+    study_area, location, latitude, longitude,
+    sensor_type, site, year, month, n_days_effort,
+    season,
+    all_of(gb_spp)
+  ) 
+
+glimpse(gb_mon)
+write.csv(gb_mon, "data/camera_data/nwtbm_gamebird_detections_by_month.csv")
+
 
 #### 1. Plot total detections of all species detected ####
 spp_count <- cam_det %>% 
@@ -298,7 +325,6 @@ gam_det
 ggsave("figures/Gameti_allspecies_detections_2023-2024.png", gam_det, width = 18, height = 12, dpi = 300)
 
 #### Total detections for ungulates only
-ung_spp <- c("Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Caribou")
 
 ung_count <- spp_count |> filter(species_common_name %in% ung_spp)
 
@@ -329,7 +355,38 @@ win.graph()
 ung_det
 
 ## Save ungulate plot
-ggsave(ung_det, "figures/nwtbmp_allprojects_ungulate_detections.png")
+ggsave("figures/nwtbm_ungulate_detections_by_studyarea.png", ung_det, width = 18, height = 12, dpi = 300)
+
+
+#### Total detections for game birds only
+gb_count <- spp_count |> filter(species_common_name %in% gb_spp)
+
+## Faceted plot for all study areas (keep axis fixed for comparison)
+gb_det <- ggplot(gb_count,
+                  aes(x = count, y = fct_reorder(species_common_name, count))) + # re-orders species into descending count
+  geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
+  facet_wrap(~study_area) +
+  labs(
+    title = "Total Game Bird Detections",
+    x = "Independent Detections (30 min.)",
+    y = NULL) + # removes y-axis title
+  theme_classic() + 
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme( #remove top axis
+    axis.text.x.top = element_blank(),
+    axis.ticks.x.top = element_blank(),
+    axis.title.x.top = element_blank())
+
+
+win.graph()
+gb_det
+
+## Save game bird plot
+ggsave("figures/nwtbm_gamebird_detections_by_studyarea.png", gb_det, width = 18, height = 12, dpi = 300)
 
 
 #### 2. Naive occupancy ####
@@ -529,3 +586,30 @@ ung_naiocc_plot
 
 ## Save
 ggsave("figures/ungulate_naive_occupancy_by_sa.png", ung_naiocc_plot, width = 18, height = 12, dpi = 300)
+
+
+#### Game bird only naive occupancy
+gb_naiocc <- spp_naive_summary |> filter(species_common_name %in% gb_spp)
+
+gb_naiocc_plot <- ggplot(gb_naiocc,
+                          aes(x = naive_occupancy, y = fct_reorder(species_common_name, naive_occupancy))) + # re-orders species into descending naive_occupancy
+  geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
+  facet_wrap(~study_area) +
+  labs(
+    title = "Naive Species Occupancy of Game birds",
+    x = "Naive Occupancy",
+    y = NULL) + # removes y-axis title
+  theme_classic() + 
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16))
+
+gb_naiocc_plot
+
+## Save
+ggsave("figures/gamebird_naive_occupancy_by_sa.png", gb_naiocc_plot, width = 18, height = 12, dpi = 300)
+
+
+#####
