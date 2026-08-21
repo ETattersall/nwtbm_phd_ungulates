@@ -123,8 +123,8 @@ glimpse(cam_det)
 
 write.csv(cam_det, "data/camera_data/nwtbm_allprojects_camera_detections_30min.csv")
 
-## Isolating ungulates
-ung_spp <- c("Barren-ground Caribou", "Bison", "Moose", "Muskox", "Woodland Caribou")
+## Isolating ungulates - don't include barren-ground caribou, since they don't overlap with fire areas
+ung_spp <- c("Bison", "Moose", "Muskox", "Woodland Caribou")
 
 ung_data <- cam_det |> filter(species_common_name %in% ung_spp)
 glimpse(ung_data)
@@ -337,8 +337,6 @@ ung_det <- ggplot(ung_count,
     title = "Total Ungulate Detections",
     x = "Independent Detections (30 min.)",
     y = NULL) + # removes y-axis title
-  scale_x_continuous(breaks = c(0, 200, 400, 600, 2800)) + # define x-axis ticks
-  scale_x_break(c(650, 2700)) + ## add x-axis break
   theme_classic() + 
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
@@ -356,6 +354,33 @@ ung_det
 
 ## Save ungulate plot
 ggsave("figures/nwtbm_ungulate_detections_by_studyarea.png", ung_det, width = 18, height = 12, dpi = 300)
+
+## try faceting by species instead, with study_area on y
+ung_det2 <- ggplot(ung_count,
+                  aes(x = count, y = fct_reorder(study_area, count))) + # re-orders species into descending count
+  geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
+  facet_wrap(~species_common_name, scales = "free_x") + ## allow each facet its own x-axis
+  labs(
+    title = "Total Ungulate Detections",
+    x = "Independent Detections (30 min.)",
+    y = NULL) + # removes y-axis title
+  theme_classic() + 
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme( #remove top axis
+    axis.text.x.top = element_blank(),
+    axis.ticks.x.top = element_blank(),
+    axis.title.x.top = element_blank())
+
+
+win.graph()
+ung_det2
+
+## Save ungulate plot
+ggsave("figures/nwtbm_ungulate_detections.png", ung_det2, width = 18, height = 12, dpi = 300)
 
 
 #### Total detections for game birds only
@@ -389,7 +414,35 @@ gb_det
 ggsave("figures/nwtbm_gamebird_detections_by_studyarea.png", gb_det, width = 18, height = 12, dpi = 300)
 
 
-#### 2. Naive occupancy ####
+## facet by species
+gb_det2 <- ggplot(gb_count,
+                   aes(x = count, y = fct_reorder(study_area, count))) + # re-orders species into descending count
+  geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
+  facet_wrap(~species_common_name, scales = "free_x") + ## allow each facet its own x-axis
+  labs(
+    title = "Total Game Bird Detections",
+    x = "Independent Detections (30 min.)",
+    y = NULL) + # removes y-axis title
+  theme_classic() + 
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme( #remove top axis
+    axis.text.x.top = element_blank(),
+    axis.ticks.x.top = element_blank(),
+    axis.title.x.top = element_blank())
+
+
+win.graph()
+gb_det2
+
+## Save ungulate plot
+ggsave("figures/nwtbm_gamebird_detections.png", gb_det2, width = 18, height = 12, dpi = 300)
+
+
+#### 2. Naive occupancy by Study Area ####
 length(unique(cam_det$location)) ## 15 locations with no detections missing, will need to be added
 
 ## Create a site by species detection matrix for all sampled locations
@@ -418,12 +471,16 @@ summary(no_det)
 stn_species_cams <- bind_rows(stn_species_cams, no_det) |> 
                       arrange(study_area, location)
 
+glimpse(stn_species_cams)
+
 ## Convert to long format for plotting
 spp_naive_long <- stn_species_cams %>% 
   group_by(study_area, location) %>% 
   pivot_longer(cols = -c(study_area, location), ## all columns except these
                names_to = "species_common_name",
                values_to = "detection")
+
+glimpse(spp_naive_long)
 
 ## For each species, calculate the proportion of locations with detections
 spp_naive_summary <- spp_naive_long %>%
@@ -433,6 +490,8 @@ spp_naive_summary <- spp_naive_long %>%
 
 ## Remove rows with 0 occupancy
 spp_naive_summary <- spp_naive_summary |> filter(naive_occupancy > 0)
+
+
 
 ## Plot naive occupancy for all study areas separately (Ede and SK plots didn't include missing sites)
 
@@ -564,52 +623,172 @@ gam_naiocc
 ggsave("figures/Gameti_allspecies_naiveoccupancy_2023-2024.png", gam_naiocc, width = 18, height = 12, dpi = 300)
 
 
-#### Ungulate only naive occupancy
-ung_naiocc <- spp_naive_summary |> filter(species_common_name %in% ung_spp)
 
-ung_naiocc_plot <- ggplot(ung_naiocc,
-                     aes(x = naive_occupancy, y = fct_reorder(species_common_name, naive_occupancy))) + # re-orders species into descending naive_occupancy
-  geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
-  facet_wrap(~study_area) +
+##### 3. Monthly detection plots #####
+## Plot total monthly detections for all study areas for each species. 1 plot = 1 species, 1 season, six study areas
+
+## Re-format into long format
+ung_mon_long <- ung_mon |> 
+  pivot_longer(
+    cols = all_of(ung_spp),
+    names_to = "species",
+    values_to = "monthly_det"
+  ) |> 
+  group_by(study_area, season, species) |> 
+  summarise(
+    total_detections = sum(monthly_det, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+glimpse(ung_mon_long)
+
+
+### Faceted seasonal plot (remember summer is 4 months - June-Sep - while winter is 8 - Oct-Apr)
+seas_ung <- ggplot(
+  ung_mon_long,
+  aes(
+    x = total_detections, # sum of all monthly detections in a season
+    y = study_area,
+    fill = season
+  )) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  facet_wrap(~species, scales = "free_x") +
   labs(
-    title = "Naive Species Occupancy of Ungulates",
-    x = "Naive Occupancy",
-    y = NULL) + # removes y-axis title
-  theme_classic() + 
+    x = "Total Monthly Detections",
+    y = NULL,
+    fill = "Season"
+  ) +
+  theme_classic() +
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
   theme(axis.title.x = element_text(size = 16)) +
   theme(axis.text = element_text(size = 12)) +
-  theme(strip.text = element_text(size = 16))
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
 
-ung_naiocc_plot
+seas_ung
 
-## Save
-ggsave("figures/ungulate_naive_occupancy_by_sa.png", ung_naiocc_plot, width = 18, height = 12, dpi = 300)
+## save
+ggsave("figures/species_monthly_detections_by_season.png", seas_ung, width = 18, height = 12, dpi = 300)
 
 
-#### Game bird only naive occupancy
-gb_naiocc <- spp_naive_summary |> filter(species_common_name %in% gb_spp)
+### Visualizing distribution of response variable
+glimpse(ung_mon)
 
-gb_naiocc_plot <- ggplot(gb_naiocc,
-                          aes(x = naive_occupancy, y = fct_reorder(species_common_name, naive_occupancy))) + # re-orders species into descending naive_occupancy
-  geom_bar(stat = "identity", fill = "seagreen4", color = "black") +
-  facet_wrap(~study_area) +
+
+
+## Remember that only subsets of the full dataset apply to each species!
+## That means that for each species, don't count the study areas they are not expected in
+
+## Datasets for each ungulate species
+## Moose present in all six, no filtering needed (use full spp_naive_summary)
+muskox_studyareas <- c("ThaideneNëné", "NormanWells", "Gameti")
+bison_studyareas <- c("Edéhzhíe", "FortSmith")
+wcaribou_studyareas <- c("Edéhzhíe", "NormanWells", "SambaaK'e")
+
+## Moose - all study areas (use full dataset)
+# Moose density plot (density = probability distribution, or likelihood of a value of monthly detections occurring)
+
+moose_dens <- ggplot(ung_mon,
+                     aes(x = Moose, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
   labs(
-    title = "Naive Species Occupancy of Game birds",
-    x = "Naive Occupancy",
-    y = NULL) + # removes y-axis title
-  theme_classic() + 
+    title = "Distribution of Moose Detections",
+    x = "Monthly Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+theme_classic() +
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
   theme(axis.title.x = element_text(size = 16)) +
   theme(axis.text = element_text(size = 12)) +
-  theme(strip.text = element_text(size = 16))
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
 
-gb_naiocc_plot
+moose_dens
 
-## Save
-ggsave("figures/gamebird_naive_occupancy_by_sa.png", gb_naiocc_plot, width = 18, height = 12, dpi = 300)
+ggsave("figures/moose_monthly_detections_distribution.png", moose_dens, width = 18, height = 12, dpi = 300)
 
+## Muskox - filtered for TDN, NW, and Gameti
 
-#####
+muskox_mon <- ung_mon |> 
+  filter(study_area %in% muskox_studyareas)
+
+muskox_dens <- ggplot(muskox_mon,
+                     aes(x = Muskox, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
+  labs(
+    title = "Distribution of Muskox Detections",
+    x = "Monthly Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+muskox_dens
+
+ggsave("figures/muskox_monthly_detections_distribution.png", muskox_dens, width = 18, height = 12, dpi = 300)
+
+## Bison - filtered for Edehzhie and FortSmith
+
+bison_mon <- ung_mon |> 
+  filter(study_area %in% bison_studyareas)
+
+bison_dens <- ggplot(bison_mon,
+                      aes(x = Bison, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
+  labs(
+    title = "Distribution of Bison Detections",
+    x = "Monthly Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+bison_dens
+
+ggsave("figures/bison_monthly_detections_distribution.png", bison_dens, width = 18, height = 12, dpi = 300)
+
+## Woodland caribou - filtered for NW, Edehzhie, and SambaaK'e
+
+wcaribou_mon <- ung_mon |> 
+  filter(study_area %in% wcaribou_studyareas)
+
+wcaribou_dens <- ggplot(wcaribou_mon,
+                     aes(x = `Woodland Caribou`, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
+  labs(
+    title = "Distribution of Woodland Caribou Detections",
+    x = "Monthly Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+wcaribou_dens
+
+ggsave("figures/woodlandcaribou_monthly_detections_distribution.png", wcaribou_dens, width = 18, height = 12, dpi = 300)
