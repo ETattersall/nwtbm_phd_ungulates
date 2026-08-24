@@ -286,7 +286,7 @@ rm(std_data_df_updated, revisions, verification, n_changed)
 write.csv(std_data_df, "data/camera_data/nwtbm_allprojects_camera_tags.csv")
 
 
-#### Camera activity plots ####
+#### Camera activity ####
 ## Wildtrax has a function for summarising camera data for analysis that will calculate survey effort based on image_date_time and image_fov.
 ## BUT this doesn't include effort for a full camera deployment like it does for shorter time periods
 
@@ -366,13 +366,88 @@ camera_summary <- deployment %>%
     by = c("study_area", "location")
   )
 
+glimpse(camera_summary)
 
 ## Some locations with up to 30 OOR ranges - which is possible, but unlikely. More likely result of some images not being tagged OOR
 ## Lots of locations have >10 OOR ranges
 
 ## Save camera summary to inspect stations with multiple consecutive OOR ranges (already done on Aug 19/20 2026, only repeat if necessary)
 ## write.csv(camera_summary, "data/camera_data/nwtbm_camera_deployment_summary.csv")
+## OOR ranges checked and revised in WildTrax on Aug 20-21, 2026
 
+## Calculate camera activity for entire deployment
+
+# Convert OOR periods back to long format - same as oor_ranges above, but includes deploy_start, deploy_end, and oor_days
+# also removes OOR periods occuring before or after deployment start and end
+oor_long <- camera_summary |> 
+  select(
+    study_area,
+    location,
+    deploy_start,
+    deploy_end,
+    matches("^oor\\d+_(start|end)$")
+  ) |> 
+  pivot_longer(
+    cols = matches("^oor\\d+_(start|end)$"), ## aggregates the OOR columns
+    names_to = c("oor_num", ".value"), ## creates a column for the numeric ID of the OOR interval
+    names_pattern = "oor(\\d+)_(start|end)"
+  ) |> 
+  filter(!is.na(start), !is.na(end)) |> 
+  
+  # Keep only intervals that overlap the deployment
+  filter(
+    end >= deploy_start,
+    start <= deploy_end
+  ) |> 
+  
+  # Clip intervals to deployment bounds
+  mutate(
+    start = pmax(start, deploy_start),
+    end   = pmin(end, deploy_end)
+  ) |> 
+  
+  # Calculate inclusive OOR days - add 1 to account for the day subtracted by end-start - that is, if end and start are the same day, oor_days would be 0 but it should be 1
+  mutate(
+    oor_days = as.numeric(end - start) + 1 
+  )
+
+
+
+
+glimpse(oor_long)
+summary(oor_long)
+table(is.na(oor_long$oor_days)) ## no NAs
+
+## Calculate deployment effort
+deployment_effort <- camera_summary |> 
+  select(study_area, location, deploy_start, deploy_end) |> 
+  mutate(
+    deploy_days = as.numeric(deploy_end - deploy_start) + 1 ## Calculate total time from deployment to retrieval
+  ) |> 
+  left_join(  ## add the total oor_days for each location to camera summary
+    oor_long |> 
+      group_by(study_area, location) |> 
+      summarise(
+        oor_days = sum(oor_days),
+        .groups = "drop"
+      ),
+    by = c("study_area", "location")
+  ) |> 
+  mutate(
+    oor_days = coalesce(oor_days, 0), ## fills missing values with 0 (even though there shouldn't be any NAs)
+    active_days = deploy_days - oor_days
+  )
+
+glimpse(deployment_effort)
+summary(deployment_effort)
+hist(deployment_effort$active_days)
+
+## Save deployment effort (overwrite deployment_summary saved above, this one is more efficient)
+write.csv(deployment_effort, "data/camera_data/nwtbm_camera_deployment_summary.csv")
+
+### Camera activity per month to be calculated in next script to add to monthly detection summary
+
+### Camera activity plots ###
 
 ## Plot for single study area
 
