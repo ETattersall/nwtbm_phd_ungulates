@@ -411,7 +411,12 @@ oor_long <- camera_summary |>
     oor_days = as.numeric(end - start) + 1 
   )
 
-
+## Check that no intervals are outside deployment
+oor_long |> 
+  summarise(
+    bad_start = sum(start < deploy_start),
+    bad_end   = sum(end > deploy_end)
+  )
 
 
 glimpse(oor_long)
