@@ -372,7 +372,7 @@ glimpse(camera_summary)
 ## Lots of locations have >10 OOR ranges
 
 ## Save camera summary to inspect stations with multiple consecutive OOR ranges (already done on Aug 19/20 2026, only repeat if necessary)
-## write.csv(camera_summary, "data/camera_data/nwtbm_camera_deployment_summary.csv")
+write.csv(camera_summary, "data/camera_data/nwtbm_camera_deployment_wideformat.csv")
 ## OOR ranges checked and revised in WildTrax on Aug 20-21, 2026
 
 ## Calculate camera activity for entire deployment
@@ -447,7 +447,7 @@ glimpse(deployment_effort)
 summary(deployment_effort)
 hist(deployment_effort$active_days)
 
-## Save deployment effort (overwrite deployment_summary saved above, this one is more efficient)
+## Save deployment effort
 write.csv(deployment_effort, "data/camera_data/nwtbm_camera_deployment_summary.csv")
 
 ### Camera activity per month to be calculated in next script to add to monthly detection summary
