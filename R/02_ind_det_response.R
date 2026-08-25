@@ -19,7 +19,7 @@ source("wildtrax_login.R") ## This will set the environment variables WTUSERNAME
 wt_auth()
 
 
-### Load raw data generated in 01_ind_det_response.R
+### Load raw data generated in 01_camera_deployment_data.R
 std_data <- read.csv("data/camera_data/nwtbm_allprojects_camera_tags.csv")
 ## Load camera location data
 cam_locs <- read.csv("data/wt_location_data/nwtbm_cam_locations_20260506.csv")
@@ -65,33 +65,7 @@ std_data2 <- std_data %>%
 class(std_data2$image_date_time) # POSIX now
 summary(std_data2$image_date_time) # no NAs
 
-# ## Do the same with cam_det start time and end time (which is based off of std_data, so should have the same formats)
-# cam_det2 <- cam_det %>%
-#   mutate(
-#     start_time = parse_date_time(
-#       start_time,
-#       orders = c(
-#         "ymd HMS",  # 2023-05-18 14:23:01
-#         "ymd"       # 2023-05-18
-#       )
-#     )
-#   ) |> 
-#   mutate(
-#     end_time = parse_date_time(
-#       end_time,
-#       orders = c(
-#         "ymd HMS",  # 2023-05-18 14:23:01
-#         "ymd"       # 2023-05-18
-#       )
-#     )
-#   )
-# 
-# class(cam_det2$start_time)
-# class(cam_det2$end_time) # both POSIX
-# summary(cam_det2$start_time)
-# summary(cam_det2$end_time) # no NAs
-
-# Re-name back to originals
+# Re-name back to original
 std_data <- std_data2
 
 
@@ -117,7 +91,7 @@ missing_det_locs ## Cross-checked all these locations with data on WT - none of 
 
 
 ## Add location coordinates to detection data
-cam_det <- cam_det %>% 
+cam_det <- cam_det |>  
   left_join(cam_locs, by = "location")
 glimpse(cam_det)
 
@@ -149,15 +123,156 @@ glimpse(det_mon)
 ## All stations?
 length(unique(det_mon$location)) # yes, including stations with no detections
 
-## add station data from cam_locs
-det_mon <- det_mon |> select(-study_area) #remove study area, since this is included in cam_locs
-det_mon <- cam_locs |> # station data should be before detection data
-  left_join(det_mon, by = "location")
+ ## Check out survey effort
+ summary(det_mon$n_days_effort) ## n_days_effort should be the number of active days within the time interval - why does it have values > 31???
+ head(det_mon)
+ hist(det_mon$n_days_effort) ## error in how function is calculating survey effort
+ 
+ ## which rows are greater than 31 (and thus definitely errors?)
+ mon_eff_bad <- det_mon |> 
+   filter(n_days_effort > 31) ## 6295 errors
+ ## how many cameras affected?
+ length(unique(mon_eff_bad$location)) ## all of them except 3...
+ ## Which 3 are not affected?
+ bad_eff_cam <- unique(mon_eff_bad$location)
+good_eff_cams <- setdiff(cam_locs$location, bad_eff_cam)
+
+## Check good effort cams in deployment summary (not that necessary to read in, could just check manually?)
+dep_eff <- read.csv("data/camera_data/nwtbm_camera_deployment_summary.csv")
+
+## Cameras without any effort errors all have at least 1 OOR day, with no clear similarities - mystery
+
+## Calculate monthly active days from the wide format camera summary to replace n_days_effort in det_mon
+## Load in wide format camera summary
+camera_summary <- read.csv("data/camera_data/nwtbm_camera_deployment_wideformat.csv")
+glimpse(camera_summary)
+table(is.na(camera_summary$deploy_start))
+table(is.na(camera_summary$deploy_end)) ## no NAs
+
+## Re-format all date columns as dates
+camera_summary <- camera_summary |> 
+  mutate(
+    across(
+      c(
+        deploy_start,
+        deploy_end,
+        matches("^oor\\d+_(start|end)$")
+      ),
+      as.Date
+    )
+  )
+
+glimpse(camera_summary)
+
+## Regenerate long format of OOR intervals and clip them to deployment bounds
+oor_long <- camera_summary |> 
+  select(
+    study_area,
+    location,
+    deploy_start,
+    deploy_end,
+    matches("^oor\\d+_(start|end)$")
+  ) |> 
+  pivot_longer(
+    cols = matches("^oor\\d+_(start|end)$"),
+    names_to = c("oor_num", ".value"),
+    names_pattern = "oor(\\d+)_(start|end)"
+  ) |> 
+  filter(!is.na(start), !is.na(end)) %>%
+  
+  # Keep only OOR intervals that overlap the deployment
+  filter(
+    end >= deploy_start,
+    start <= deploy_end
+  ) |> 
+  
+  # Clip OOR intervals to deployment boundaries
+  mutate(
+    start = pmax(start, deploy_start),
+    end   = pmin(end, deploy_end)
+  )
+
+## Generate deployment dates - all dates when a camera was deployed
+deployment_dates <- camera_summary |> 
+  select(study_area, location, deploy_start, deploy_end) |> 
+  rowwise() |> #group by rows
+  mutate(
+    active_date = list(seq(deploy_start, deploy_end, by = "day")) # list the days between start and end in sequence
+  ) |> 
+  unnest(active_date) |> 
+  ungroup()
+ 
+
+## Create OOR dates based on the deployment period only
+oor_dates <- oor_long |> 
+  rowwise() |> 
+  mutate(
+    active_date = list(seq(start, end, by = "day")) ## active_date here is the OOR dates
+  ) |> 
+  unnest(active_date) |> 
+  ungroup() |> 
+  select(study_area, location, active_date)
+
+## Remove OOR dates from deployment dates
+active_dates <- deployment_dates %>%
+  anti_join( ## anti_join returns rows that don't match the oor_dates 
+    oor_dates,
+    by = c("study_area", "location", "active_date")
+  )
+
+
+## summarize by month
+monthly_effort <- active_dates %>%
+  mutate(
+    year = year(active_date),
+    month_num = month(active_date),
+    month = format(active_date, "%B"),      # January, February, etc.
+    year_month = floor_date(active_date, "month")
+  ) %>%
+  group_by(
+    study_area,
+    location,
+    year,
+    month_num,
+    month,
+    year_month
+  ) %>%
+  summarise(
+    active_days = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(
+    study_area,
+    location,
+    year,
+    month_num
+  )
+
+glimpse(monthly_effort)
+hist(monthly_effort$active_days)
+summary(monthly_effort$active_days) ## 1-31
 
 glimpse(det_mon)
 
+## monthly effort has more rows than det_month (35 more), suggesting that det_month is dropping some months for certain stations (months with no animal detections?)
+## Find missing rows in det_mon with anti_join
+missing_rows <- monthly_effort %>%
+  anti_join(
+    det_mon,
+    by = c(
+      "study_area",
+      "location",
+      "year",
+      "month"
+    )
+  )
+nrow(missing_rows)
+head(missing_rows) ## ENWA-O-03-04 had an untagged office image - revised to OOR, needs to be re-run (but check other missing rows before re-running)
+### Cross-check of WT images and a couple of the stations in missing_rows suggests that these months contained no images within FOV, so they have 0 survey effort those months. Can be removed from analysis
+
+## Add season to monthly effort before joining it to monthly detection data
 # Adding season to monthly data, with June - July as summer and October - May as winter (snow-free/snow)
- det_mon <- det_mon %>%
+monthly_effort <- monthly_effort %>%
   mutate(
     month = as.character(month),
     season = case_when(
@@ -167,9 +282,28 @@ glimpse(det_mon)
       TRUE ~ NA_character_),
     season = factor(season, levels = c("Summer", "Winter")))
 
- glimpse(det_mon)
+glimpse(monthly_effort)
 
- ## Save number of detections by month
+
+### Join monthly_effort to det_mon by study_area, location, year, month. Use right_join to keep all observations in det_mon. Remove n_days_effort
+det_mon2 <- monthly_effort |> 
+  right_join(det_mon,
+             by = c(
+               "study_area",
+               "location",
+               "year",
+               "month"
+             )
+            ) |> 
+  select(-n_days_effort)
+glimpse(det_mon2)
+
+det_mon <- det_mon2
+
+rm(det_mon2)
+
+
+## Save number of detections by month
 write.csv(det_mon, "data/camera_data/nwtbm_allspecies_detections_by_month.csv")
 
 ## Save ungulates and gamebirds
@@ -792,3 +926,22 @@ wcaribou_dens <- ggplot(wcaribou_mon,
 wcaribou_dens
 
 ggsave("figures/woodlandcaribou_monthly_detections_distribution.png", wcaribou_dens, width = 18, height = 12, dpi = 300)
+
+
+####4. Survey Effort ####
+
+## Axes are very weird on this one
+# ggplot(det_mon, aes(x = n_days_effort, fill = season)) +
+# geom_histogram(binwidth = 30, alpha = 0.6, position = "identity") +
+# labs(
+#   x = "Camera Effort by Month",
+#   y = "Frequency"
+# ) +
+# theme_classic() +
+#   # increase size of title text, axis text
+#   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+#   theme(axis.title.x = element_text(size = 16)) +
+#   theme(axis.text = element_text(size = 12)) +
+#   theme(strip.text = element_text(size = 16)) +
+#   theme(legend.title = element_text(size = 16)) +
+#   theme(legend.text = element_text(size = 14))
