@@ -235,7 +235,7 @@ n_changed <- sum(
     coalesce(std_data_df_updated$image_fov, "")
 )
 
-n_changed ## 116 344 records changed
+n_changed ## 116 340 records changed
 
 
 ## Inspect changed records
@@ -298,6 +298,8 @@ std_data2 <- std_data_df %>%
 
 class(std_data2$img_date)
 table(is.na(std_data2$image_fov))
+
+
 #--------------------------------------------------
 # Deployment start/end from NON-OOR images only
 #--------------------------------------------------
