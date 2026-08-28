@@ -17,6 +17,8 @@ cam_det <- read.csv("data/camera_data/nwtbm_allprojects_camera_detections_30min.
 ung_mon <- read.csv("data/camera_data/nwtbm_ungulate_detections_by_month.csv")
 gb_mon <- read.csv("data/camera_data/nwtbm_gamebird_detections_by_month.csv")
 
+
+
 ## Filter these for single project
 tdn_camdata <- std_data |> filter(study_area == "ThaideneNëné")
 tdn_det <- cam_det |> filter(study_area == "ThaideneNëné")
@@ -24,39 +26,14 @@ tdn_ung_mon <- ung_mon |> filter(study_area == "ThaideneNëné") |>
                           select(-X, -Bison, -Woodland.Caribou) ## remove species not found in TDN
 tdn_gb_mon <- gb_mon |> filter(study_area == "ThaideneNëné") |> 
                         select(-X, -Ruffed.Grouse) ## remove species not found in TDN
-summary(tdn_ung_mon) ## 11 NAs in active_days (most likely no detections at those stations)
-## Convert season to factor
-tdn_ung_mon$season <- as.factor(tdn_ung_mon$season)
-tdn_gb_mon$season <- as.factor(tdn_gb_mon$season)
-summary(tdn_ung_mon)
-summary(tdn_gb_mon) ## also 11 NAs in active days
+summary(tdn_ung_mon) 
 
-na.season <- tdn_ung_mon |> filter(is.na(season)) ## only one with detections is BMS-TLU-058-09 in Nov. Muskox detectable even though most of the image is obscured. Need to exclude anyway
+summary(tdn_gb_mon)
 
-## Exclude NA active days from tdn_ung_mon and tdn_gb_mon
-tdn_ung_mon <- tdn_ung_mon |> filter(!is.na(active_days))
-tdn_gb_mon <- tdn_gb_mon |> filter(!is.na(active_days))
 
-## Summarize all Ptarmigans into single category (overwrite Ptarmigan category)
+## Summarize all Ptarmigans into single category (overwrite current Ptarmigan category)
 tdn_gb_mon$Ptarmigans <- tdn_gb_mon$Ptarmigans + tdn_gb_mon$Rock.Ptarmigan + tdn_gb_mon$Willow.Ptarmigan
 
-## BIO-TDN-029-02 August STGR has been revised to SPGR --> remove summer STGR row and manually revise SPGR summer row
-
-tdn_gb_mon <- tdn_gb_mon |> 
-  mutate(
-    Sharp.tailed.Grouse = if_else(
-      location == "BIO-TDN-029-02" &
-        year_month == "2022-08-01",
-      0,
-      Sharp.tailed.Grouse
-    ),
-    Spruce.Grouse = if_else(
-      location == "BIO-TDN-029-02" &
-        year_month == "2022-08-01",
-      1,
-      Spruce.Grouse
-    )
-  )
 
 
 ## Add location coordinates to detection data
@@ -73,7 +50,8 @@ write.csv(tdn_det, "data/camera_data/tdn2021-2022_camera_detections_30min.csv")
 
 ##### Single project figures (note - single project independent detections and naive occupancy plots for all species already generated in script 02)
 
-#### 1. Plot monthly detections of ungulates and game birds - in winter and in summer ####
+#### 1. Plot monthly detections of ungulates and game birds ####
+
 glimpse(tdn_ung_mon)
 glimpse(tdn_gb_mon)
 
@@ -84,7 +62,7 @@ l_ung_tdn <- tdn_ung_mon |>
     names_to = "species",
     values_to = "monthly_det"
   ) |> 
-  group_by(study_area, season, species) |> 
+  group_by(study_area, species) |> 
   summarise(
     total_detections = sum(monthly_det, na.rm = TRUE),
     .groups = "drop"
@@ -98,7 +76,7 @@ l_gb_tdn <- tdn_gb_mon |>
     names_to = "species",
     values_to = "monthly_det"
   ) |> 
-  group_by(study_area, season, species) |> 
+  group_by(study_area, species) |> 
   summarise(
     total_detections = sum(monthly_det, na.rm = TRUE),
     .groups = "drop"
@@ -107,63 +85,56 @@ l_gb_tdn <- tdn_gb_mon |>
 glimpse(l_gb_tdn)
 
 
-### Seasonal Plot for ungulates
-seas_ung <- ggplot(
+### Ungulate detections
+det_ung <- ggplot(
   l_ung_tdn,
   aes(
-    x = total_detections, # sum of all monthly detections in a season
-    y = species,
-    fill = season
+    x = total_detections, # sum of all monthly detections
+    y = species
   )) +
-  geom_col(position = position_dodge(width = 0.8)) +
+  geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
-    title = "Seasonal Ungulate Detections, Thaidene Nëné 2021-2022",
+    title = "Ungulate Detections, Thaidene Nëné 2021-2022",
     x = "Total Monthly Detections",
     y = NULL,
-    fill = "Season"
+    fill = NULL
   ) +
   theme_classic() +
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 32, face = "bold", hjust = 0.5)) +
   theme(axis.title.x = element_text(size = 20)) +
   theme(axis.text = element_text(size = 16)) +
-  theme(strip.text = element_text(size = 20)) +
-  theme(legend.title = element_text(size = 20)) +
-  theme(legend.text = element_text(size = 18))
+  theme(strip.text = element_text(size = 20))
 
-seas_ung
+det_ung
 
 ## Save plot
-ggsave("figures/tdn_ungulate_seasonal_detections.png", seas_ung, width = 18, height = 12, dpi = 300)
+ggsave("figures/TDN/tdn_ungulate_seasonal_detections.png", det_ung, width = 18, height = 12, dpi = 300)
 
 ### Seasonal Plot for game birds
-seas_gb <- ggplot(
+det_gb <- ggplot(
   l_gb_tdn,
   aes(
     x = total_detections, # sum of all monthly detections in a season
-    y = species,
-    fill = season
+    y = species
   )) +
-  geom_col(position = position_dodge(width = 0.8)) +
+  geom_col(position = position_dodge(width = 0.8),     fill = "darkgreen") +
   labs(
-    title = "Seasonal Game Bird Detections, Thaidene Nëné 2021-2022",
+    title = "Game Bird Detections, Thaidene Nëné 2021-2022",
     x = "Total Game Bird Detections",
-    y = NULL,
-    fill = "Season"
+    y = NULL
   ) +
   theme_classic() +
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 32, face = "bold", hjust = 0.5)) +
   theme(axis.title.x = element_text(size = 20)) +
   theme(axis.text = element_text(size = 16)) +
-  theme(strip.text = element_text(size = 20)) +
-  theme(legend.title = element_text(size = 20)) +
-  theme(legend.text = element_text(size = 18))
+  theme(strip.text = element_text(size = 20))
 
-seas_gb
+det_gb
 
 ## Save plot
-ggsave("figures/tdn_gamebird_seasonal_detections.png", seas_gb, width = 18, height = 12, dpi = 300)
+ggsave("figures/TDN/tdn_gamebird_seasonal_detections.png", det_gb, width = 18, height = 12, dpi = 300)
 
 
 #### 2. Naive occupancy ####
@@ -177,11 +148,11 @@ glimpse(tdn_ung_mon)
 ## Create a site by species detection matrix (by season!) for all sampled locations
 # specify species columns
 ung_cols <- c("Moose", "Muskox")
-gb_cols <- c("Ptarmigans", "Sharp.tailed.Grouse", "Spruce.Grouse")
+gb_cols <- c("Ptarmigans", "Sharp.tailed.Grouse", "Spruce.Grouse", "Rock.Ptarmigan", "Willow.Ptarmigan")
 
 
 location_ung <- tdn_ung_mon  |> 
-  group_by(location, season) |> 
+  group_by(location) |> 
   summarise(
     across(
       all_of(ung_cols),
@@ -193,7 +164,7 @@ location_ung <- tdn_ung_mon  |>
 glimpse(location_ung)
 
 location_gb <- tdn_gb_mon  |> 
-  group_by(location, season) |> 
+  group_by(location) |> 
   summarise(
     across(
       all_of(gb_cols),
@@ -208,14 +179,14 @@ glimpse(location_gb)
 
 ## Convert to long format for plotting
 ung_naive_long <- location_ung %>% 
-  group_by(location, season) %>% 
-  pivot_longer(cols = -c(location, season), ## all columns except location and season
+  group_by(location) %>% 
+  pivot_longer(cols = -c(location), ## all columns except location
                names_to = "species_common_name",
                values_to = "detection")
 
 gb_naive_long <- location_gb %>% 
-  group_by(location, season) %>% 
-  pivot_longer(cols = -c(location, season), ## all columns except location and season
+  group_by(location) %>% 
+  pivot_longer(cols = -c(location), ## all columns except location
                names_to = "species_common_name",
                values_to = "detection")
 
@@ -223,12 +194,12 @@ glimpse(ung_naive_long)
 
 ## For each species, calculate the proportion of locations with detections
 ung_naive_summary <- ung_naive_long %>%
-  group_by(species_common_name, season) %>%
+  group_by(species_common_name) %>%
   summarise(naive_occupancy = mean(detection), .groups = "drop") %>% # mean of detection column gives the proportion of locations with detections (naive occupancy)
   arrange(desc(naive_occupancy))
 
 gb_naive_summary <- gb_naive_long %>%
-  group_by(species_common_name, season) %>%
+  group_by(species_common_name) %>%
   summarise(naive_occupancy = mean(detection), .groups = "drop") %>% # mean of detection column gives the proportion of locations with detections (naive occupancy)
   arrange(desc(naive_occupancy))
 
@@ -239,14 +210,13 @@ glimpse(gb_naive_summary)
 ## Plot
 ung_naiocc <- ggplot(ung_naive_summary,
                    aes(x = naive_occupancy, 
-                       y = fct_reorder(species_common_name, naive_occupancy), # re-orders species into descending naive_occupancy
-                       fill = season)) + 
-  geom_col(position = position_dodge(width = 0.8)) +
+                       y = fct_reorder(species_common_name, naive_occupancy))) +  # re-orders species into descending naive_occupancy
+  geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     title = "Naive Ungulate Occupancy, Thaidene Nëné 2021-2022",
     x = "Naive Occupancy",
-    y = NULL, # removes y-axis title
-    fill = "Season") + # removes y-axis title
+    y = NULL # removes y-axis title
+  ) + 
   theme_classic() + 
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 32, face = "bold", hjust = 0.5)) +
@@ -259,18 +229,18 @@ ung_naiocc <- ggplot(ung_naive_summary,
 ung_naiocc
 
 ## Save plot
-ggsave("figures/tdn_ungulate_naiveoccupancy_2021-2022.png", ung_naiocc, width = 18, height = 12, dpi = 300)
+ggsave("figures/TDN/tdn_ungulate_naiveoccupancy_2021-2022.png", ung_naiocc, width = 18, height = 12, dpi = 300)
 
 gb_naiocc <- ggplot(gb_naive_summary,
                      aes(x = naive_occupancy, 
-                         y = fct_reorder(species_common_name, naive_occupancy), # re-orders species into descending naive_occupancy
-                         fill = season)) + 
-  geom_col(position = position_dodge(width = 0.8)) +
+                         y = fct_reorder(species_common_name, naive_occupancy) # re-orders species into descending naive_occupancy
+                         )) + 
+  geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     title = "Naive Game Bird Occupancy, Thaidene Nëné 2021-2022",
     x = "Naive Occupancy",
-    y = NULL, # removes y-axis title
-    fill = "Season") + # removes y-axis title
+    y = NULL # removes y-axis title
+    ) + 
   theme_classic() + 
   # increase size of title text, axis text
   theme(plot.title = element_text(size = 32, face = "bold", hjust = 0.5)) +
@@ -282,14 +252,14 @@ gb_naiocc <- ggplot(gb_naive_summary,
 gb_naiocc
 
 ## Save plot
-ggsave("figures/tdn_gamebird_naiveoccupancy_2021-2022.png", gb_naiocc, width = 18, height = 12, dpi = 300)
+ggsave("figures/TDN/tdn_gamebird_naiveoccupancy_2021-2022.png", gb_naiocc, width = 18, height = 12, dpi = 300)
 
 #### 3. Spatial patterns in detections ####
 ## Only for target species (individual plots)
 
 ### Create a stn by species count matrix, where values = total number of detections of each species at each station
 tdn_ung_count <- tdn_ung_mon |> 
-  group_by(location, season) |> 
+  group_by(location) |> 
   summarise(
     across(
       all_of(ung_cols),
@@ -304,7 +274,7 @@ length(unique(tdn_ung_count$location)) # yes
 
 
 tdn_gb_count <- tdn_gb_mon |> 
-  group_by(location, season) |> 
+  group_by(location) |> 
   summarise(
     across(
       all_of(gb_cols),
@@ -383,8 +353,8 @@ moose_det <- ggplot() +
   geom_sf(data = tdn_sf, linewidth = 1, color = "black", fill = NA) + # study area outline
   geom_sf(
     data = moose_ct_sf, ## add spatial detection data
-    aes(size = Moose, color = season), # vary point size by count of detections, change color for seasons
-    show.legend = TRUE) +
+    aes(size = Moose,color = season), # vary point size by count of detections, change color for seasons
+    show.legend = TRUE) + 
   scale_fill_gradient(low = "yellow", high = "red") + # red gradient for more recent burns
   scale_color_manual(
     values = c(
@@ -640,3 +610,71 @@ win.graph()
 stgr_det
 
 ggsave("figures/tdn2021-2022_spatial_stgr_detections.png", stgr_det, width = 12, height = 8, dpi = 300)
+
+
+### Compare ROPT and WIPT locations
+glimpse(tdn_gb_count)
+
+## Select only the 2 ptarm spp
+ptarm_spp <- tdn_gb_count |> 
+  select(-Ptarmigans, -Sharp.tailed.Grouse, -Spruce.Grouse, -X)
+
+glimpse(ptarm_spp)
+
+## Pivot tdn_gb_count longer and only keep 
+l_ptarmspp <- ptarm_spp |> 
+  pivot_longer(
+    cols = c("Willow.Ptarmigan", "Rock.Ptarmigan"),
+    names_to = "species",
+    values_to = "total_detections"
+  )
+
+glimpse(l_ptarmspp)
+
+sf_ptarms <- st_as_sf(l_ptarmspp, coords = c("longitude", "latitude"), crs = 4326)
+glimpse(sf_ptarms)
+
+## filter for presence only
+sf_ptarms <- sf_ptarms |> filter(total_detections > 0)
+
+### Plot ptarms to compare occurrences
+ptarms_in_tdn <- ggplot() +
+  #layer_spatial(basemap) + # add basemap
+  geom_sf(data = tdn_sf, linewidth = 0, color = NA, fill = "lightgreen") + # study area background color
+  geom_sf(data = tdn_fire, aes(fill = YEAR), color = NA, size = 1.5) + # TDN fire polygons
+  geom_sf(data = tdn_sf, linewidth = 1, color = "black", fill = NA) + # study area outline
+  geom_sf(
+    data = sf_ptarms, ## add spatial detection data
+    aes(size = total_detections, color = species), # vary point size by count of detections, change color for seasons
+    show.legend = TRUE) +
+  scale_fill_gradient(low = "yellow", high = "red") + # red gradient for more recent burns
+  scale_color_manual(
+    values = c(
+      "Willow.Ptarmigan" = "purple",
+      "Rock.Ptarmigan" = "dodgerblue"
+    )
+  ) +
+  labs(x = "Longitude",
+       y = "Latitude",
+       size = "No. of Detections",
+       color = "Species",
+       fill = "Fire Year") +
+  theme_classic() +
+  ## increase size of points in legend
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 6)
+    )
+  ) +
+  # increase label sizes for axes titles and text
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 13),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 14)
+  )
+
+win.graph()
+ptarms_in_tdn
