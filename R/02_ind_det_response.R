@@ -810,8 +810,11 @@ write.csv(ung_mon, "data/camera_data/nwtbm_ungulate_detections_by_month.csv")
 write.csv(gb_mon, "data/camera_data/nwtbm_gamebird_detections_by_month.csv")
 
 ### Plot total detections by month for target ungulates and game birds to check seasonal cut-offs
+## Plot as monthly capture rate - (no. detections / active days)*100 days
 ## one plot per species, different colors for each study area
 ## Individual plots (not faceted - not ready to pivot the data longer or divide into different species dfs)
+
+glimpse(det_mon2)
 
 ## Set colors for each study area
 study_area_cols <- c(
@@ -828,7 +831,7 @@ moose_mon <- ggplot(
   det_mon2,
   aes(
     x = month, # sum of all monthly detections in a season
-    y = Moose,
+    y = (Moose/active_days)*100,
     fill = study_area
   )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -838,7 +841,7 @@ moose_mon <- ggplot(
   ) +
   labs(
     x = "Month",
-    y = "Moose Detections",
+    y = "Moose Capture Rate per 100 Days",
     fill = "Study Area"
   ) +
   theme_classic() +
@@ -862,7 +865,7 @@ caribou_mon <- det_mon2 |>
   ggplot(
   aes(
     x = month, # sum of all monthly detections in a season
-    y = `Woodland Caribou`,
+    y = (`Woodland Caribou`/active_days)*100,
     fill = study_area
   )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -872,7 +875,7 @@ caribou_mon <- det_mon2 |>
   ) +
   labs(
     x = "Month",
-    y = "Woodland Caribou Detections",
+    y = "Woodland Caribou Capture Rate per 100 Days",
     fill = "Study Area"
   ) +
   theme_classic() +
@@ -895,7 +898,7 @@ muskox_mon <- det_mon2 |>
   ggplot(
   aes(
     x = month, # sum of all monthly detections in a season
-    y = Muskox,
+    y = (Muskox/active_days) * 100,
     fill = study_area
   )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -905,7 +908,7 @@ muskox_mon <- det_mon2 |>
   ) +
   labs(
     x = "Month",
-    y = "Muskox Detections",
+    y = "Muskox Capture Rate per 100 Days",
     fill = "Study Area"
   ) +
   theme_classic() +
@@ -928,7 +931,7 @@ mutate(study_area = droplevels(study_area)) |>
   ggplot(
   aes(
     x = month, # sum of all monthly detections in a season
-    y = Bison,
+    y = (Bison/active_days)*100,
     fill = study_area
   )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -938,7 +941,7 @@ mutate(study_area = droplevels(study_area)) |>
   ) +
   labs(
     x = "Month",
-    y = "Bison Detections",
+    y = "Bison Capture Rate per 100 Days",
     fill = "Study Area"
   ) +
   theme_classic() +
@@ -964,7 +967,7 @@ ptarm_mon <- gb_mon |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = Ptarmigans,
+      y = (Ptarmigans/active_days) * 100,
       fill = study_area
     )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -974,7 +977,7 @@ ptarm_mon <- gb_mon |>
   ) +
   labs(
     x = "Month",
-    y = "Ptarmigan Detections",
+    y = "Ptarmigan Capture Rate per 100 Days",
     fill = "Study Area"
   ) +
   theme_classic() +
@@ -998,7 +1001,7 @@ spgr_mon <- gb_mon |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = `Spruce Grouse`,
+      y = (`Spruce Grouse`/active_days) * 100,
       fill = study_area
     )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -1008,7 +1011,7 @@ spgr_mon <- gb_mon |>
   ) +
   labs(
     x = "Month",
-    y = "Spruce Grouse Detections",
+    y = "Spruce Grouse Capture Rate per 100 Days",
     fill = "Study Area"
   ) +
   theme_classic() +
@@ -1031,7 +1034,7 @@ stgr_mon <- gb_mon |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = `Sharp-tailed Grouse`,
+      y = (`Sharp-tailed Grouse`/active_days) * 100,
       fill = study_area
     )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -1064,7 +1067,7 @@ rugr_mon <- gb_mon |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = `Ruffed Grouse`,
+      y = (`Ruffed Grouse`/active_days) * 100,
       fill = study_area
     )) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -1074,7 +1077,7 @@ rugr_mon <- gb_mon |>
   ) +
   labs(
     x = "Month",
-    y = "Ruffed Grouse Detections",
+    y = "Ruffed Grouse Capture Rate per 100 Days",
     fill = "Study Area"
   ) +
   theme_classic() +
@@ -1090,18 +1093,18 @@ rugr_mon <- gb_mon |>
 rugr_mon 
 ggsave("figures/rugr_monthly_detections_by_studyarea.png", rugr_mon, width = 18, height = 12, dpi = 300)
 
-#### Detections by Month across all study areas ####
+#### Capture rate by Month across all study areas ####
 ## Moose
 moose_mon2 <- ggplot(
   det_mon2,
   aes(
     x = month, # sum of all monthly detections in a season
-    y = Moose
+    y = (Moose/active_days)*100
   )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Moose Detections"
+    y = "Moose Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
@@ -1124,12 +1127,12 @@ caribou_mon2 <- det_mon2 |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = `Woodland Caribou`
+      y = (`Woodland Caribou`/active_days)*100
     )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Woodland Caribou Detections"
+    y = "Woodland Caribou Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
@@ -1151,12 +1154,12 @@ muskox_mon2 <- det_mon2 |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = Muskox
+      y = (Muskox/active_days)*100
     )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Muskox Detections"
+    y = "Muskox Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
@@ -1178,12 +1181,12 @@ bison_mon2 <- det_mon2 |>
   ggplot(
     aes(
       x = month,
-      y = Bison
+      y = (Bison/active_days)*100
     )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Bison Detections"
+    y = "Bison Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
@@ -1209,12 +1212,12 @@ ptarm_mon2 <- gb_mon |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = Ptarmigans
+      y = (Ptarmigans/active_days)*100
     )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Ptarmigan Detections"
+    y = "Ptarmigan Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
@@ -1235,12 +1238,12 @@ spgr_mon2 <- gb_mon |>
   ggplot(
     aes(
       x = month,
-      y = `Spruce Grouse`
+      y = (`Spruce Grouse`/active_days)*100
     )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Spruce Grouse Detections"
+    y = "Spruce Grouse Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
@@ -1262,12 +1265,12 @@ stgr_mon2 <- gb_mon |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = `Sharp-tailed Grouse`
+      y = (`Sharp-tailed Grouse`/active_days)*100
     )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Sharp-tailed Grouse Detections"
+    y = "Sharp-tailed Grouse Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
@@ -1289,12 +1292,12 @@ rugr_mon2 <- gb_mon |>
   ggplot(
     aes(
       x = month, # sum of all monthly detections in a season
-      y = `Ruffed Grouse`
+      y = (`Ruffed Grouse`/active_days)*100
     )) +
   geom_col(position = position_dodge(width = 0.8), fill = "darkgreen") +
   labs(
     x = "Month",
-    y = "Ruffed Grouse Detections"
+    y = "Ruffed Grouse Capture Rate per 100 Days"
   ) +
   theme_classic() +
   # increase size of title text, axis text
