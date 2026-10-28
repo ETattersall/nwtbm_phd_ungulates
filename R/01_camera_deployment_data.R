@@ -931,3 +931,4 @@ ede_dep <- ggplot() +
 ede_dep
 
 ggsave("figures/edehzhie_cameraactivity.png", ede_dep, width = 18, height = 12, dpi = 300)
+

@@ -956,6 +956,38 @@ mutate(study_area = droplevels(study_area)) |>
 bison_mon 
 ggsave("figures/bison_monthly_detections_by_studyarea.png", bison_mon, width = 18, height = 12, dpi = 300)
 
+##  snowshoe hare 
+hare_mon <- det_mon2 |> 
+  filter(study_area %in% det_mon2$study_area[det_mon2$`Snowshoe Hare` > 0]) |> ## filter for and drop unused study areas
+  mutate(study_area = droplevels(study_area)) |> 
+  ggplot(
+    aes(
+      x = month, # sum of all monthly detections in a season
+      y = (`Snowshoe Hare`/active_days)*100,
+      fill = study_area
+    )) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  scale_fill_manual(
+    values = study_area_cols,
+    drop = TRUE
+  ) +
+  labs(
+    x = "Month",
+    y = "Snowshoe Hare Capture Rate per 100 Days",
+    fill = "Study Area"
+  ) +
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+win.graph()
+hare_mon 
+ggsave("figures/hare_monthly_detections_by_studyarea.png", hare_mon, width = 18, height = 12, dpi = 300)
 
 
  ##### Game birds
