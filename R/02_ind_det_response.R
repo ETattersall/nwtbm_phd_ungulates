@@ -532,6 +532,8 @@ ggsave("figures/Gameti_allspecies_naiveoccupancy_2023-2024.png", gam_naiocc, wid
 
 
 
+
+
 ##### 3. Monthly detections #####
 ## Calculating station-month detection summaries with wt_summarise_cam
 det_mon <- wt_summarise_cam(
@@ -1534,7 +1536,53 @@ wcaribou_dens
 ggsave("figures/woodlandcaribou_monthly_detections_distribution.png", wcaribou_dens, width = 18, height = 12, dpi = 300)
 
 
-####4. Survey Effort ####
+#### 4. Converting monthly detections to seasonal detections
+glimpse(det_mon2)
+
+## Add all ROPT and WIPT detections to Ptarmigans column
+det_mon2$Ptarmigans <- det_mon2$Ptarmigans + det_mon2$`Rock Ptarmigan` + det_mon2$`Willow Ptarmigan`
+
+## Select only species of interest
+spp_mon <- det_mon2 |> 
+  select(study_area, location, year, month, month_num, year_month, active_days, Bison, Moose, Muskox, `Woodland Caribou`, `Snowshoe Hare`, Ptarmigans, `Rock Ptarmigan`, `Ruffed Grouse`, `Sharp-tailed Grouse`, `Spruce Grouse`, `Willow Ptarmigan`) # re-ordering columns and selecting target species
+
+## rename columns
+colnames(spp_mon) <- c("study_area", "location", "year", "month", "month_num", "year_month", "active_days", "Bison", "Moose", "Muskox", "Woodland.Caribou", "Snowshoe.Hare", "Ptarmigans", "Rock.Ptarmigan", "Ruffed.Grouse", "Sharptailed.Grouse", "Spruce.Grouse", "Willow.Ptarmigan")
+
+glimpse(spp_mon)
+
+
+## Add snow/snow-free seasons and summarize by season
+
+## specify which columns are to be summed
+sum_cols <- c("active_days", "Bison", "Moose", "Muskox", "Woodland.Caribou", "Snowshoe.Hare", "Ptarmigans", "Rock.Ptarmigan", "Ruffed.Grouse", "Sharptailed.Grouse", "Spruce.Grouse", "Willow.Ptarmigan")
+
+spp_season <- spp_mon |>
+  mutate(
+    season = factor( ## adding a variable for snow and snow-free
+      case_when(
+        month %in% c("June", "July", "August", "September") ~ "snow-free",
+        month %in% c("October", "November", "December",
+                     "January", "February", "March",
+                     "April", "May") ~ "snow"
+      ),
+      levels = c("snow", "snow-free")
+    )) |> 
+  group_by(study_area, location, season) |> ## groups that won't be summarized (all temporal variables will be lumped)
+  summarise(across(all_of(sum_cols), ## sum each of the columns in sum_cols by season, location, and study_area
+                   ~ sum(.x, na.rm = TRUE)),
+            .groups = "drop")
+
+glimpse(spp_season)
+summary(spp_season)
+
+
+### Save
+write.csv(spp_season, "data/camera_data/nwtbm_allspecies_seasonal_detections.csv")
+
+
+
+#### 4. Survey Effort ####
 
 ## Axes are very weird on this one
 # ggplot(det_mon, aes(x = n_days_effort, fill = season)) +
