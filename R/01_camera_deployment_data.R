@@ -24,6 +24,8 @@ x <- c("sf",
 ## install.packages(x) ## should already be installed ####
 lapply(x, require, character.only = TRUE)
 
+# install.packages("remotes")
+# remotes::install_github("ABbiodiversity/wildrtrax")
 
 ## Needed to download station locations
 library(wildrtrax)
