@@ -11,6 +11,9 @@ list.of.packages <- c("tidyverse", "data.table", "lubridate", "plotly", "ggplot2
 lapply(list.of.packages, require, character.only = TRUE)
 
 ## Needed to download station locations
+# install.packages("remotes")
+# remotes::install_github("ABbiodiversity/wildrtrax")
+
 library(wildrtrax)
 
 
@@ -529,8 +532,6 @@ gam_naiocc
 
 ## Save plot
 ggsave("figures/Gameti_allspecies_naiveoccupancy_2023-2024.png", gam_naiocc, width = 18, height = 12, dpi = 300)
-
-
 
 
 
@@ -1348,199 +1349,14 @@ ggsave("figures/rugr_monthly_detections.png", rugr_mon2, width = 18, height = 12
 
 
 
-#### Seasons should differ for different species to account for species-specific phenology
-# Adding season to monthly data, with June - July as summer and October - May as winter (snow-free/snow)
-# monthly_effort <- monthly_effort %>%
-#   mutate(
-#     month = as.character(month),
-#     season = case_when(
-#       month %in% c("June", "July", "August", "September") ~ "Summer",
-#       month %in% c("October", "November", "December", "January", "February", 
-#                    "March", "April", "May") ~ "Winter",
-#       TRUE ~ NA_character_),
-#     season = factor(season, levels = c("Summer", "Winter")))
-
-
-
-
-
-
-
-
-## Plot total monthly detections for all study areas for each species. 1 plot = 1 species, 1 season, six study areas
-
-## Re-format into long format
-ung_mon_long <- ung_mon |> 
-  pivot_longer(
-    cols = all_of(ung_spp),
-    names_to = "species",
-    values_to = "monthly_det"
-  ) |> 
-  group_by(study_area, season, species) |> 
-  summarise(
-    total_detections = sum(monthly_det, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-glimpse(ung_mon_long)
-
-
-### Faceted seasonal plot (remember summer is 4 months - June-Sep - while winter is 8 - Oct-Apr)
-seas_ung <- ggplot(
-  ung_mon_long,
-  aes(
-    x = total_detections, # sum of all monthly detections in a season
-    y = study_area,
-    fill = season
-  )) +
-  geom_col(position = position_dodge(width = 0.8)) +
-  facet_wrap(~species, scales = "free_x") +
-  labs(
-    x = "Total Monthly Detections",
-    y = NULL,
-    fill = "Season"
-  ) +
-  theme_classic() +
-  # increase size of title text, axis text
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.text = element_text(size = 12)) +
-  theme(strip.text = element_text(size = 16)) +
-  theme(legend.title = element_text(size = 16)) +
-  theme(legend.text = element_text(size = 14))
-
-seas_ung
-
-## save
-ggsave("figures/species_monthly_detections_by_season.png", seas_ung, width = 18, height = 12, dpi = 300)
-
-
-### Visualizing distribution of response variable
-glimpse(ung_mon)
-
-
-
-## Remember that only subsets of the full dataset apply to each species!
-## That means that for each species, don't count the study areas they are not expected in
-
-## Datasets for each ungulate species
-## Moose present in all six, no filtering needed (use full spp_naive_summary)
-muskox_studyareas <- c("ThaideneNëné", "NormanWells", "Gameti")
-bison_studyareas <- c("Edéhzhíe", "FortSmith")
-wcaribou_studyareas <- c("Edéhzhíe", "NormanWells", "SambaaK'e")
-
-## Moose - all study areas (use full dataset)
-# Moose density plot (density = probability distribution, or likelihood of a value of monthly detections occurring)
-
-moose_dens <- ggplot(ung_mon,
-                     aes(x = Moose, colour = season, fill = season)) +
-  geom_density(alpha = 0.8) +
-  labs(
-    title = "Distribution of Moose Detections",
-    x = "Monthly Detections",
-    y = "Density"
-  ) +
-  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
-theme_classic() +
-  # increase size of title text, axis text
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.text = element_text(size = 12)) +
-  theme(strip.text = element_text(size = 16)) +
-  theme(legend.title = element_text(size = 16)) +
-  theme(legend.text = element_text(size = 14))
-
-moose_dens
-
-ggsave("figures/moose_monthly_detections_distribution.png", moose_dens, width = 18, height = 12, dpi = 300)
-
-## Muskox - filtered for TDN, NW, and Gameti
-
-muskox_mon <- ung_mon |> 
-  filter(study_area %in% muskox_studyareas)
-
-muskox_dens <- ggplot(muskox_mon,
-                     aes(x = Muskox, colour = season, fill = season)) +
-  geom_density(alpha = 0.8) +
-  labs(
-    title = "Distribution of Muskox Detections",
-    x = "Monthly Detections",
-    y = "Density"
-  ) +
-  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
-  theme_classic() +
-  # increase size of title text, axis text
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.text = element_text(size = 12)) +
-  theme(strip.text = element_text(size = 16)) +
-  theme(legend.title = element_text(size = 16)) +
-  theme(legend.text = element_text(size = 14))
-
-muskox_dens
-
-ggsave("figures/muskox_monthly_detections_distribution.png", muskox_dens, width = 18, height = 12, dpi = 300)
-
-## Bison - filtered for Edehzhie and FortSmith
-
-bison_mon <- ung_mon |> 
-  filter(study_area %in% bison_studyareas)
-
-bison_dens <- ggplot(bison_mon,
-                      aes(x = Bison, colour = season, fill = season)) +
-  geom_density(alpha = 0.8) +
-  labs(
-    title = "Distribution of Bison Detections",
-    x = "Monthly Detections",
-    y = "Density"
-  ) +
-  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
-  theme_classic() +
-  # increase size of title text, axis text
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.text = element_text(size = 12)) +
-  theme(strip.text = element_text(size = 16)) +
-  theme(legend.title = element_text(size = 16)) +
-  theme(legend.text = element_text(size = 14))
-
-bison_dens
-
-ggsave("figures/bison_monthly_detections_distribution.png", bison_dens, width = 18, height = 12, dpi = 300)
-
-## Woodland caribou - filtered for NW, Edehzhie, and SambaaK'e
-
-wcaribou_mon <- ung_mon |> 
-  filter(study_area %in% wcaribou_studyareas)
-
-wcaribou_dens <- ggplot(wcaribou_mon,
-                     aes(x = `Woodland Caribou`, colour = season, fill = season)) +
-  geom_density(alpha = 0.8) +
-  labs(
-    title = "Distribution of Woodland Caribou Detections",
-    x = "Monthly Detections",
-    y = "Density"
-  ) +
-  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
-  theme_classic() +
-  # increase size of title text, axis text
-  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-  theme(axis.title.x = element_text(size = 16)) +
-  theme(axis.text = element_text(size = 12)) +
-  theme(strip.text = element_text(size = 16)) +
-  theme(legend.title = element_text(size = 16)) +
-  theme(legend.text = element_text(size = 14))
-
-wcaribou_dens
-
-ggsave("figures/woodlandcaribou_monthly_detections_distribution.png", wcaribou_dens, width = 18, height = 12, dpi = 300)
-
-
 #### 4. Converting monthly detections to seasonal detections
 glimpse(det_mon2)
 
 ## Add all ROPT and WIPT detections to Ptarmigans column
 det_mon2$Ptarmigans <- det_mon2$Ptarmigans + det_mon2$`Rock Ptarmigan` + det_mon2$`Willow Ptarmigan`
+
+summary(det_mon2)
+
 
 ## Select only species of interest
 spp_mon <- det_mon2 |> 
@@ -1582,20 +1398,199 @@ write.csv(spp_season, "data/camera_data/nwtbm_allspecies_seasonal_detections.csv
 
 
 
-#### 4. Survey Effort ####
+## Plot total seasonal detections for all study areas for each species. 1 plot = 1 species, 2 season, six study areas
 
-## Axes are very weird on this one
-# ggplot(det_mon, aes(x = n_days_effort, fill = season)) +
-# geom_histogram(binwidth = 30, alpha = 0.6, position = "identity") +
-# labs(
-#   x = "Camera Effort by Month",
-#   y = "Frequency"
-# ) +
-# theme_classic() +
-#   # increase size of title text, axis text
-#   theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
-#   theme(axis.title.x = element_text(size = 16)) +
-#   theme(axis.text = element_text(size = 12)) +
-#   theme(strip.text = element_text(size = 16)) +
-#   theme(legend.title = element_text(size = 16)) +
-#   theme(legend.text = element_text(size = 14))
+## all target species
+targ_spp <- c("Bison", "Moose", "Muskox", "Woodland.Caribou", "Snowshoe.Hare", "Ptarmigans", "Rock.Ptarmigan", "Ruffed.Grouse", "Sharptailed.Grouse", "Spruce.Grouse", "Willow.Ptarmigan")
+
+## Re-format into long format
+seas_long <- spp_season |> 
+  pivot_longer(
+    cols = all_of(targ_spp),
+    names_to = "species",
+    values_to = "seasonal_det"
+  ) |> 
+  group_by(study_area, season, species) |> 
+  summarise(
+    total_detections = sum(seasonal_det, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+glimpse(seas_long)
+
+
+### Faceted seasonal plot (remember summer is 4 months - June-Sep - while winter is 8 - Oct-Apr)
+seas_det <- ggplot(
+  seas_long,
+  aes(
+    x = total_detections, # sum of all seasonal detections
+    y = season,
+    fill = season
+  )) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  facet_wrap(~species, scales = "free_x") +
+  labs(
+    x = "Total Detections",
+    y = "Season"
+  ) +
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+win.graph()
+seas_det
+
+## save
+ggsave("figures/species_detections_by_season.png", seas_det, width = 18, height = 12, dpi = 300)
+
+
+### Visualizing distribution of response variable
+
+
+
+
+## Remember that only subsets of the full dataset apply to each species!
+## That means that for each species, don't count the study areas they are not expected in
+
+## Datasets for each ungulate species
+## Moose present in all six, no filtering needed (use full spp_naive_summary)
+muskox_studyareas <- c("ThaideneNëné", "NormanWells", "Gameti")
+bison_studyareas <- c("Edéhzhíe", "FortSmith")
+wcaribou_studyareas <- c("Edéhzhíe", "NormanWells", "SambaaK'e")
+
+## Moose - all study areas (use full dataset)
+# Moose density plot (density = probability distribution, or likelihood of a value of monthly detections occurring)
+
+moose_dens <- ggplot(spp_season,
+                     aes(x = Moose, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
+  labs(
+    title = "Distribution of Moose Detections",
+    x = "Seasonal Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+moose_dens
+
+ggsave("figures/moose_seasonal_detections_distribution.png", moose_dens, width = 18, height = 12, dpi = 300)
+
+## What are the seasonal sample sizes? How many counts per season?
+table(spp_season$season)
+
+## snow snow-free 
+##  717       714 
+
+## Muskox - filtered for TDN, NW, and Gameti
+
+muskox_seas <- spp_season |> 
+  filter(study_area %in% muskox_studyareas)
+
+muskox_dens <- ggplot(muskox_seas,
+                      aes(x = Muskox, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
+  labs(
+    title = "Distribution of Muskox Detections",
+    x = "Seasonal Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+muskox_dens
+
+ggsave("figures/muskox_seasonal_detections_distribution.png", muskox_dens, width = 18, height = 12, dpi = 300)
+
+## What are the seasonal sample sizes? How many counts per season?
+table(muskox_seas$season)
+
+## snow snow-free 
+##  451       466 
+
+## Bison - filtered for Edehzhie and FortSmith
+
+bison_seas <- spp_season |> 
+  filter(study_area %in% bison_studyareas)
+
+bison_dens <- ggplot(bison_seas,
+                     aes(x = Bison, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
+  labs(
+    title = "Distribution of Bison Detections",
+    x = "Seasonal Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+bison_dens
+
+ggsave("figures/bison_seasonal_detections_distribution.png", bison_dens, width = 18, height = 12, dpi = 300)
+
+## What are the seasonal sample sizes? How many counts per season?
+table(bison_seas$season)
+## snow snow-free 
+##  237       220
+
+## Woodland caribou - filtered for NW, Edehzhie, and SambaaK'e
+
+wcaribou_seas <- spp_season |> 
+  filter(study_area %in% wcaribou_studyareas)
+
+glimpse(wcaribou_seas)
+
+wcaribou_dens <- ggplot(wcaribou_seas,
+                        aes(x = Woodland.Caribou, colour = season, fill = season)) +
+  geom_density(alpha = 0.8) +
+  labs(
+    title = "Distribution of Woodland Caribou Detections",
+    x = "Seasonal Detections",
+    y = "Density"
+  ) +
+  scale_x_continuous(trans = "log1p") + # log transform x axis to visualize tail better
+  theme_classic() +
+  # increase size of title text, axis text
+  theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)) +
+  theme(axis.title.x = element_text(size = 16)) +
+  theme(axis.text = element_text(size = 12)) +
+  theme(strip.text = element_text(size = 16)) +
+  theme(legend.title = element_text(size = 16)) +
+  theme(legend.text = element_text(size = 14))
+
+wcaribou_dens
+
+ggsave("figures/woodlandcaribou_seasonal_detections_distribution.png", wcaribou_dens, width = 18, height = 12, dpi = 300)
+
+## What are the seasonal sample sizes? How many counts per season?
+table(wcaribou_seas$season)
+##  snow snow-free 
+##   286       271 
+
+
