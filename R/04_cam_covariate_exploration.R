@@ -5,140 +5,87 @@
 #######################################
 
 
-list.of.packages <- c("tidyverse", "ggplot2", "lattice", "here", "climr", "stringr", "purrr", "ggpubr", "Rcmdr", "car", "lme4", "interactions")
+list.of.packages <- c("tidyverse", "ggplot2", "lattice", "here", "stringr", "purrr", "ggpubr", "car", "lme4", "interactions")
 lapply(list.of.packages, require, character.only = TRUE)
 
 
-##### Load the station data from cameras, land (by site and by station), and climate covariates (by site and by station) #####
+##### Load the station data from cameras, land, and climate covariates. This analysis will be at the station level, so load station-level covariates #####
 ## Camera data - all species
-cam_mon <- read.csv("data/camera_data/nwtbm_allspecies_detections_by_month.csv")
+cam_det <- read.csv("data/camera_data/nwtbm_allspecies_seasonal_detections.csv")
 
-glimpse(cam_mon)
-cam_mon$X <- NULL
+glimpse(cam_det)
+cam_det$X <- NULL
+summary(cam_det)
 
-## Add all ROPT and WIPT detections to Ptarmigans column
-cam_mon$Ptarmigans <- cam_mon$Ptarmigans + cam_mon$Rock.Ptarmigan + cam_mon$Willow.Ptarmigan
 
-## Landcover covariates- site and stn
+
+## Landcover covariates-  stn
 stn_cov <- read.csv("data/cov_data/nwtbm_sensor_covariate_data.csv")
 glimpse(stn_cov) # includes topography, prop_burned, and fireage, but NOT severity
 summary(stn_cov) #fireage has 423 (>50%) NAs - unburned sites
 
-site_cov <- read.csv("data/cov_data/nwtbm_sites_covariate_data.csv")
-glimpse(site_cov)
-summary(site_cov)
 
 ## load fire severity data
 stn_fsev <- read.csv("data/cov_data/nwtbm_sensor_ntems_fireseverity.csv")
 glimpse(stn_fsev)
 summary(stn_fsev)
 
-site_fsev <- read.csv("data/cov_data/nwtbm_sites_ntems_fireseverity.csv")
-glimpse(site_fsev)
-summary(site_fsev)
 
 ## mean_severity is the mean calculated after non-fire cells were removed and the fire selection rule was applied
 ## fsev_mean_raw is the raw mean calculated directly from fsev data
 ## fsev_mean_max is the raw max
 
-### Climate data - site and stn
+### Climate data -stn
 stn_clim <- read.csv("data/cov_data/nwtbm_sensor_climate_covariate_data.csv")
 summary(stn_clim)
 glimpse(stn_clim)
-site_clim <- stn_cov <- read.csv("data/cov_data/nwtbm_sites_climate_covariate_data.csv")
-glimpse(site_clim)
+
 
 ## multiple rows per station/site if the sensor was active in the same month during consecutive years
-
-## refresher on what all the climate variables are
-View(variables)
-#MAP = mean annual precipitation
-#MAT = mean annual temperature
-#PAS = precip. as snow
-#PPT = precipitation
-#_an = annual
-#_at = autumn
-#_sm = summer
-#_sp = spring
-#_wt = winter
-#_01-12 = months of year
 
 
 ## camera data don't have columns for site - needs to be added to aggregate at site level (add from sites in landcover dataset below)
 stn_sites <- stn_cov |> select(study_area, location, site)
 
-cam_mon <- cam_mon |> 
+cam_det <- cam_det |> 
   left_join(stn_sites,
             by = c("study_area", "location")) |> 
-  mutate(month_num = match(month, month.name)) |> ## adding month as numeric (to align with months in climate data)
-  select(study_area, location, site, year, month, month_num, year_month, active_days, Bison, Moose, Muskox, Woodland.Caribou, Snowshoe.Hare, Ptarmigans, Rock.Ptarmigan, Ruffed.Grouse, Sharp.tailed.Grouse, Spruce.Grouse, Willow.Ptarmigan) # re-ordering columns and selecting target species
+  select(study_area, location, site, season, active_days, Bison, Moose, Muskox, Woodland.Caribou, Snowshoe.Hare, Ptarmigans, Rock.Ptarmigan, Ruffed.Grouse, Sharptailed.Grouse, Spruce.Grouse, Willow.Ptarmigan) # re-ordering columns 
 
-glimpse(cam_mon)
-summary(cam_mon)
-
-
-### Aggregate detection data by site - sum detections at each stations within a site (including active days)
-#specify which columns to sum
-spp_var <- names(cam_mon)[8:19]
+glimpse(cam_det)
+summary(cam_det)
 
 
-cam_site <- cam_mon |> 
-  group_by(study_area, site, year, year_month, month, month_num) |> 
-  summarise(
-    across(all_of(spp_var), ~ sum(.x, na.rm = TRUE)),
-    .groups = "drop"
-  )
-
-glimpse(cam_site)
-summary(cam_site)
 
 #### Combine response variables (camera data) with covariates #####
 
-#### Combining detections with Climate data ####
+#### Include climate data? ####
+## note: climate data extracted with the climr package, which is not available for the most recent version of R. Extracted with R 4.5.1
+## Climate data aggregated at the seasonal level may not have much variance, nor will it likely tell us much about seasonal habitat use
+
 ## convert to long format (this will duplicate any annual climate data)
 ## Station data
 stn_clim_long <- stn_clim |>
   pivot_longer(
-    cols = matches("_(0[1-9]|1[0-2])$"),
-    names_to = c(".value", "month"),
-    names_pattern = "(.*)_(\\d{2})"
+    cols = matches("_(0[1-9]|1[0-2])$"), ## for any column with a monthly integer (01 - 12)
+    names_to = c(".value", "month"), ## column names will be the initial column identifier and month
+    names_pattern = "(.*)_(\\d{2})" ## pattern to follow for the column values will be the column identifier itself and the the monthly 2-digit integer
   ) |>
   mutate(
     month = as.integer(month))
 
-## Remove any annual or quarterly data
-stn_clim_long <- stn_clim_long[ , c(3:7, 12, 41:46)]
+## Remove any annual or quarterly data, Tmin, and Tmax (will only focus on PAS, PAT, and Tave)
+stn_clim_long <- stn_clim_long[ , c(3:7, 12, 41:44)]
 
 glimpse(stn_clim_long)
 summary(stn_clim_long) # No NAs
 
 
-### Join climate data to monthly species detections
-cam_clim <- cam_mon %>%
-  left_join(
-    stn_clim_long,
-    by = c(
-      "study_area",
-      "location",
-      "site",
-      "year" = "PERIOD",
-      "month_num" = "month"
-    )
-  )
-
-
-glimpse(cam_clim)
-summary(cam_clim) ## Climate data contains NAs - need to determine which ones and why
-
-## Which rows are NA? filtered for PAS, but all climate columns are NA
-na.clim <- cam_clim |> filter(is.na(PAS))
-# NAs for year_months with no climate data - ThaideneNene and Edehzhie both had a few stations deployed until 2023. Revised the end date in the climate script and re-ran
-
 
 ######## Quick aside: Determining Seasonal breakpoints (dividing into seasonal models) ####
 ## Summarize across locations to plot precipitation as snow
-precip_plot_dat <- cam_clim |>
-  group_by(study_area,month_num) |>
+precip_plot_dat <- stn_clim_long |>
+  group_by(study_area,month) |>
   summarise(
     PAS = mean(PAS, na.rm = TRUE), ## averaging across all years
     .groups = "drop"
@@ -148,7 +95,7 @@ glimpse(precip_plot_dat)
 
 ## plot Snow
 snow.plot <- ggplot(precip_plot_dat,
-                    aes(x = month_num, y = PAS, colour = study_area)) +
+                    aes(x = month, y = PAS, colour = study_area)) +
   geom_line(linewidth = 1.2) +
   geom_point(size = 2) +
   scale_x_continuous(
@@ -165,6 +112,7 @@ snow.plot <- ggplot(precip_plot_dat,
   theme(plot.title = element_text(size = 32, face = "bold", hjust = 0.5)) +
   theme(axis.title = element_text(size = 20)) +
   theme(axis.text = element_text(size = 16)) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8)) +
   theme(strip.text = element_text(size = 20)) +
   theme(legend.text = element_text(size = 18))
 
@@ -174,29 +122,18 @@ snow.plot
 ggsave("figures/Monthly_snow_by_study_area.png", snow.plot, width = 18, height = 12, dpi = 300)
 
 ### Plot min, mean, and max temperatures
-temp_plot_dat <- cam_clim |>
-  group_by(month_num) |>
+temp_plot_dat <- stn_clim_long |>
+  group_by(month) |>
   summarise(
-    Tmin = mean(Tmin, na.rm = TRUE),
     Tave = mean(Tave, na.rm = TRUE),
-    Tmax = mean(Tmax, na.rm = TRUE),
     .groups = "drop"
-  ) |>
-  pivot_longer(
-    cols = c(Tmin, Tave, Tmax),
-    names_to = "variable",
-    values_to = "temperature"
   )
 
+
 ggplot(temp_plot_dat,
-       aes(x = month_num, y = temperature,
-           colour = variable)) +
+       aes(x = month, y = Tave)) +
   geom_line(linewidth = 1.2) +
   geom_point(size = 2) +
-  scale_x_continuous(
-    breaks = 1:12,
-    labels = month.abb
-  ) +
   labs(
     x = "Month",
     y = expression(Temperature~(degree*C)),
@@ -208,14 +145,14 @@ ggplot(temp_plot_dat,
 
 ## expect linear relationship between temperature and snow (negative)
 
-hist(cam_clim$Tave)
-hist(cam_clim$PAS)
+hist(stn_clim_long$Tave)
+hist(stn_clim_long$PAS)
 
-lm(PAS ~ Tave, data = cam_clim) |> summary()
+lm(PAS ~ Tave, data = stn_clim_long) |> summary()
 
-glimpse(cam_clim)
+glimpse(stn_clim_long)
 
-snow_temp <- ggplot(cam_clim) +
+snow_temp <- ggplot(stn_clim_long) +
   aes(x = Tave, y = PAS) + 
   geom_point() + 
   geom_smooth(method = "lm", se = TRUE, color = "purple") +
@@ -241,268 +178,259 @@ snow_temp
 ggsave("figures/data_exploration/climate_data_relationships.png", snow_temp, width = 18, height = 12, dpi = 300)
 
 
-######
 
-## Site data
-site_clim_long <- site_clim |>
-  pivot_longer(
-    cols = matches("_(0[1-9]|1[0-2])$"),
-    names_to = c(".value", "month"),
-    names_pattern = "(.*)_(\\d{2})"
-  ) |>
+
+## Examine climate data by season for variance
+glimpse(stn_clim_long)
+
+# create vector of columns for seasonal data
+seas_cols <- c("PAS", "PPT", "Tave")
+
+## Lump months into seasons
+seasonal_clim <- stn_clim_long |>
   mutate(
-    month = as.integer(month))
-## Remove any annual or quarterly data
-site_clim_long <- site_clim_long[ , c(2:3, 32:37)]
+    season = factor( ## adding a variable for snow and snow-free
+      case_when(
+        month %in% 6:9 ~ "snow-free",
+        month %in% c(1:5, 10:12) ~ "snow"
+      ),
+      levels = c("snow", "snow-free")
+    )) |> 
+  group_by(study_area, site, location, lon, lat, season) |> ## groups that won't be summarized (all temporal variables will be lumped)
+  summarise(across(all_of(seas_cols), ## calculate the mean of each of the columns in seas_cols by season, location, and study_area
+                   ~ mean(.x, na.rm = TRUE)),
+            .groups = "drop")
 
-### Join climate data to ung_site
-cam_clim_site <- cam_site %>%
-  left_join(
-    site_clim_long,
-    by = c(
-      "site",
-      "year" = "PERIOD",
-      "month_num" = "month"
-    )
-  )
+glimpse(seasonal_clim)
 
-glimpse(cam_clim_site)
 
-#### Add landcover and fire severity to station data ####
+## Box plots of average temperature by season
+
+seas_temp <- ggplot(seasonal_clim,
+                 aes(x = season, y = Tave)) +
+  geom_boxplot() +
+  labs(y = "Mean Temp (C)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24))
+
+win.graph()
+seas_temp # mean snow season temperature between -17 - -7; snow-free between 10 - 15. Do we expect an ecological difference in habitat use across this range? (No)
+
+##### Don't include climate data as covariates
+
+
+#### Add fire severity to station data ####
 glimpse(stn_cov)
 stn_cov$X <- NULL
 
-glimpse(cam_clim)
-## remove lon and lat from cam_clim
-cam_clim <- cam_clim |> 
-  select(-lon, -lat)
-
-cam_stn_cov <- cam_clim |> 
-  left_join(stn_cov,
-            by = c("study_area", "location", "site"))
-
-glimpse(cam_stn_cov)
-summary(cam_stn_cov) # only variable with NAs is FireAge, which is right
 
 ## Add binary variable for burned/unburned based on FireAge
-cam_stn_cov <- cam_stn_cov |> 
+stn_cov <- stn_cov |> 
   mutate(burned_binary = ifelse(is.na(FireAge), 0, 1)) # if FireAge is NA, burned_binary should be 0, otherwise, 1
 
-table(cam_stn_cov$burned_binary) # 4453 0s, which corresponds to NAs in Fire Age
+table(stn_cov$burned_binary) # 423 NAs in FireAge, so 423 0s (unburned)
 
 ## Add fire severity data
 glimpse(stn_fsev) # keep only location/site/study_are keys, fire_year, mean_severity, fsev_max_raw, and fsev_mean_raw
-stn_fsev <- stn_fsev |> 
-  select(study_area, site, location, fire_year, mean_severity, fsev_mean_raw, fsev_max_raw)
+hist(stn_fsev$mean_severity)
+hist(stn_fsev$fsev_mean_raw) ## almost identical. Remove raw mean 
 
-cam_stn_cov <- cam_stn_cov |> 
+stn_fsev <- stn_fsev |> 
+  select(study_area, site, location, fire_year, mean_severity, fsev_max_raw)
+
+stn_cov <- stn_cov |> 
   left_join(stn_fsev,
             by = 
               c("study_area", "site", "location"))
 
-glimpse(cam_stn_cov)
+glimpse(stn_cov) ### Contains all station landcover, topography, and fire covariates
 
+## Landcover and topography covariates will likely be dropped. The focus question is the effect of fire disturbance, so these are the primary covariates
+## Since landcover is also affected by disturbance (fire), it would not be included in the adjustment set of the causal model (see DAGs)
 
-#### Add landcover and fire severity to site data
-glimpse(site_cov)
-site_cov$X <- NULL
+## Test topography variance
+topo <- ggplot(stn_cov,
+                    aes(y = tri_500m)) +
+  geom_boxplot() +
+  labs(y = "Terrain Ruggedness Index") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24))
 
-cam_site_cov <- cam_clim_site |> 
-  left_join(site_cov,
-            by = c("study_area", "site"))
+win.graph()
+topo ## values between 0-20, indicating very gradual changes in ruggedness
 
-glimpse(cam_site_cov)
-summary(cam_site_cov) # only variable with NAs is FireAge, which is right
+## Topography has very low variation and likely would not produce an ecological effect on space use, so shouldn't be included in modelling
 
-## Add binary variable for burned/unburned based on FireAge
-cam_site_cov <- cam_site_cov |> 
-  mutate(burned_binary = ifelse(is.na(FireAge), 0, 1)) # if FireAge is NA, burned_binary should be 0, otherwise, 1
+glimpse(stn_cov) ## keep the fire variables only
+fire_cov <- stn_cov |> 
+  mutate( ## convert to factors
+  study_area = factor(study_area),
+  location   = factor(location),
+  site       = factor(site)
+) |> 
+  select(study_area, location, site, burned_binary, proportion_burned_500m, fire_year, FireAge, mean_severity, fsev_max_raw)
 
-table(cam_site_cov$burned_binary) # 1044 0s, which corresponds to NAs in Fire Age
+glimpse(fire_cov)
+summary(fire_cov)
 
-## Add fire severity data
-glimpse(site_fsev) # keep only site/study_are keys, fire_year, mean_severity, fsev_max_raw, and fsev_mean_raw
-site_fsev <- site_fsev |> 
-  select(study_area, site, fire_year, mean_severity, fsev_mean_raw, fsev_max_raw)
+## rename fire variables for simplicity
+colnames(fire_cov) <- c("study_area", "location", "site", "burned", "prop_burned", "fire_year", "burn_age", "burn_severity", "fsev_max")
 
-cam_site_cov <- cam_site_cov |> 
-  left_join(site_fsev,
-            by = 
-              c("study_area", "site"))
+### Add fire covariates to seasonal camera data
+glimpse(cam_det)
 
-glimpse(cam_site_cov)
-summary(cam_site_cov)
-
-## cam_site_cov and cam_stn_cov now contain all response and covariate data! Divide into snow and snow-free datasets prior to modelling
-
-## convert study_area, location, site, and month into factors
-cam_stn_cov <- cam_stn_cov |>
+## convert study_area, location, site, season into factors in cam_det
+cam_det <- cam_det |>
   mutate(
     study_area = factor(study_area),
     location   = factor(location),
     site       = factor(site),
-    season = factor( ## adding a variable for snow and snow-free
-      case_when(
-        month %in% c("June", "July", "August", "September") ~ "snow-free",
-        month %in% c("October", "November", "December",
-                     "January", "February", "March",
-                     "April", "May") ~ "snow"
-      ),
-      levels = c("snow", "snow-free")
-    ),
-    month      = factor(
-      month,
-      levels = c(
-        "January", "February", "March", "April",
-        "May", "June", "July", "August",
-        "September", "October", "November", "December"
-      ),
-      ordered = TRUE
-    ),
-    year = factor(year)
+    season     = factor(season),
   )
 
+
+cam_stn_cov <- cam_det |> 
+  left_join(fire_cov, by = c("study_area", "location", "site"))
+
 glimpse(cam_stn_cov)
-table(cam_stn_cov$season)
+summary(cam_stn_cov) ## only time since fire and burn severity columns have NAs (which is correct)
 
-## Save station data with categoricals as factors
-write.csv(cam_stn_cov, "data/nwtbm_camera_stations_model_data.csv")
-write.csv(cam_site_cov, "data/nwtbm_camera_sites_model_data.csv") ## not factorized yet
 
+
+### Can't figure out why there are fewer Ptarmigan seasonal detections than WIPT
+sum(cam_stn_cov$Ptarmigans)
+sum(cam_stn_cov$Willow.Ptarmigan)
+
+table(cam_stn_cov$Ptarmigans)
+table(cam_stn_cov$Willow.Ptarmigan)
+
+## Correct here - so why does the range for Ptarmigans only go up to 5 in the box plot?
+
+## Fort Smith 2023 fire stations - 13 Fort Smith stations experienced fire in May and July of 2023. Remove these from analysis (fire variables changed during study period)
+summary(cam_stn_cov$burn_age)
+## Only remove stations with burn age 1 (only stations affected by fire during study period)
+cam_stn_cov <- cam_stn_cov |> filter_out(burn_age == 1)
+
+
+## Are stations with burn age 2 okay? Some areas were surveyed for multiple years
+cam_stn_cov |> filter(burn_age ==2) # yes - these burned in 2022, and monitoring began post-fire season.
+
+## Burn severity data only exists for years 1985 - 2022 in this dataset. Severity data outside that range should be NA
+pre_ntems <- cam_stn_cov |> filter(burn_age > 37) ## 1985 is 37 years before 2022
+
+### Correct - fires pre-1985 have NA for severity. Fire_year and burn_Age don't always line up, probably because of the rule we applied for which polygon to use. Disregard fire year
+
+## Save station data with categoricals as factors and without fire-affected data
+write.csv(cam_stn_cov, "data/nwtbm_camera_stations_seasonal_model_data.csv")
 
 ###### Data Exploration #####
 
+cam_stn_cov <- read.csv("data/nwtbm_camera_stations_seasonal_model_data.csv")
+glimpse(cam_stn_cov)
+
+## If re-reading in, check that factor variables are correct!
+cam_stn_cov$X <- NULL
+cam_stn_cov <- cam_stn_cov |> 
+  mutate(
+    study_area = factor(study_area),
+    location   = factor(location),
+    site       = factor(site),
+    season     = factor(season)
+         )
+
+## Split into snow and snow free seasons
+snow_data <- cam_stn_cov |> filter(season == "snow")
+snowfree_data <- cam_stn_cov |> filter(season == "snow-free")
+
+summary(snow_data)
+summary(snowfree_data)
+
 ## Following Zuur et al. 2010, following the script originally created by Val Lucet: https://github.com/VLucet/Zuur-et-al-10-steps/tree/main
 
-### Exploring cam_stn_cov first
-
-## cam_stn_cov needs to be separated into summer and winter datasets
-winter_months <- c(1:5, 10:12)
-summer_months <- c(6:9)
-
-## filter for winter stations
-win_stns <- cam_stn_cov |> filter(month_num %in% winter_months)
-sum_stns <- cam_stn_cov |> filter(month_num %in% summer_months)
-
-
-
-
-# Store datasets in a list
-datasets <- list(
-  Winter = win_stns,
-  Summer = sum_stns
-)
-
-
-
-
-#### 1. Outliers in the response variable ####
-glimpse(win_stns) # columns 8 - 44 are response and predictor variables
-
-## Box plot (single variable)
-ggplot(cam_stn_cov) + 
-  geom_boxplot(aes(y = Moose)) +
-  labs(y = "Monthly moose") +
-  theme_bw()
-
-## Cleveland dot plot (single variable)
-ggplot(cam_stn_cov) + 
-  geom_point(aes(x = Moose, y = 1:nrow(cam_stn_cov))) +
-  labs(x = "Monthly Moose",
-       y = "Order of the data") +
-  theme_bw()
-
 ## Identifying sets of variables in the dataframe (same in summer and winter datasets)
-resp.vars <- colnames(cam_stn_cov[ , 9:19]) ## columns containing camera data
-cov.vars <- colnames(cam_stn_cov[ , c(20:24, 28:44)]) ## columns for covariate data
+resp.vars <- colnames(cam_stn_cov[ , 6:16]) ## columns containing camera data
+cov.vars <- colnames(cam_stn_cov[ , c(5, 17:22)]) ## columns for covariate data (include active_days!)
 
-## Faceted Cleveland dot plots - create function to streamline plotting
+#### 1. Outliers in the covariates ####
 
-make_cleveland <- function(dat, vars, facet_name, xlab) {
-  
-  dat |> # generating a long-format df from seasonal dataset
-    pivot_longer(
-      cols = all_of(vars), # vars = object with name of response or covariate variables
-      names_to = facet_name, # facet_name = either response or covariate
-      values_to = "value"
-    ) |>
-    group_by(across(all_of(facet_name))) |>
-    arrange(value, .by_group = TRUE) |>
-    mutate(rank = row_number()) |> # ranking observation to better view patterns
-    ungroup() |>
-    ggplot(aes(x = value, y = rank)) +
-    geom_point(alpha = 0.6, size = 1) +
-    facet_wrap(as.formula(paste("~", facet_name)),
-               scales = "free_x") +
-    labs(
-      x = xlab, # xlab = summer/winter detections/covariates
-      y = "Ranked observation"
-    ) +
-    theme_bw()
-}
+## Covariates should be the same for snow and snow free datasets, except for number of active days
 
-# Generate plots
-cleve_dotplots <- imap(datasets, \(dat, season) { # 'indexed map' applying the specified function to either response or covariate data in dat for each season df in the datasets list
+## Different study areas are included for different species. Start with moose, which include all study areas
 
-  list(
-    response = make_cleveland(
-      dat, 
-      resp.vars,
-      "taxon",
-      paste(season, "detections")
-    ),
-    
-    covariate = make_cleveland(
-      dat,
-      cov.vars,
-      "covariate",
-      paste(season, "covariate value")
-    )
-  )
-})
+## SPGR, STGR, and Ptarmigans also occur in all study areas
 
-cleve_dotplots$Winter$response
-cleve_dotplots$Summer$response
+## Faceted Cleveland dot plots
+
+## Pivot longer to plot all variables together
+## covariates
+cov_long_ranked <- snow_data |>
+  pivot_longer(
+    cols = all_of(cov.vars),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  arrange(value, .by_group = TRUE) |>
+  mutate(rank = row_number()) |> # ranking observation to better view patterns
+  ungroup()
 
 
-## All response variables are heavily zero-inflated
+### Ranked Cleveland Dot plot for fire covariates
+glimpse(cov_long_ranked)
 
-## Only major outlier seems to be a single spruce grouse month with over 50 detections
-ggplot(cam_stn_cov) + 
-  geom_boxplot(aes(y = Spruce.Grouse)) +
-  labs(y = "Monthly SPGR") +
+cov_cleve <- cov_long_ranked |> 
+  ggplot(aes(x = value, y = rank)) +
+  geom_point(alpha = 0.6, size = 1) +
+  facet_wrap(~ variable,
+             scales = "free_x") +
+  labs(
+    x = xlab, # xlab = summer/winter detections/covariates
+    y = "Ranked observation"
+  ) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 14)) +
+  theme(axis.title = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 18))
+
+win.graph()
+cov_cleve
+
+### save
+ggsave("figures/data_exploration/covariate_cleveland_dot_plots.png", cov_cleve, width = 18, height = 12, dpi = 300)
+
+
+#### Response variables - Moose
+
+
+## Snow data
+
+## Cleveland dot plot
+ggplot(snow_data) + 
+  geom_point(aes(x = Moose, y = 1:nrow(snow_data))) +
+  labs(x = "Moose",
+       y = "Order of the data",
+       title = "Snow Season") +
   theme_bw()
 
-## Identify the SPGR outlier
-cam_stn_cov |> slice_max(Spruce.Grouse, n = 5) ## find the observations with the 5 highest SPGR detections
-## One Fort Smith site (BMS-TLU-126-084, May 2023) with a male displaying actively - keep in dataset, but may need to think about how to handle distribution
-
-### Save all plots
-iwalk(cleve_dotplots, \(season_plots, season) {
-  
-  iwalk(season_plots, \(p, plot_type) {
-    
-    ggsave(
-      filename = paste0("figures/data_exploration/", tolower(season), "_", plot_type, ".png"),
-      plot = p,
-      width = 12,
-      height = 10,
-      dpi = 300
-    )
-    
-  })
-  
-})
+## Snow-free data
+ggplot(snowfree_data) + 
+  geom_point(aes(x = Moose, y = 1:nrow(snowfree_data))) +
+  labs(x = "Moose",
+       y = "Order of the data",
+       title = "Snow-free Season") +
+  theme_bw()
 
 #### 2. Homogeneity of variance - are there patterns in how the data vary?
-## We KNOW that the landscape variables will have spatial patterns and the climate variables will have temporal patterns
 
 glimpse(cam_stn_cov)
 
 ## Check each variable's variance across study areas using box plots
 
-## Pivot longer for plotting
-cov_long <- cam_stn_cov |>
+## Pivot longer for plotting (not ranked)
+cov_long <- snow_data |>
   pivot_longer(
     cols = all_of(cov.vars),
     names_to = "variable",
@@ -519,7 +447,8 @@ cov_sa <- ggplot(cov_long,
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
   theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.title.y = element_text(size = 24))
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 18))
 
 win.graph()
 cov_sa
@@ -527,115 +456,18 @@ cov_sa
 ## Save 
 ggsave("figures/data_exploration/covariate_studyarea_variance.png", cov_sa, width = 18, height = 12, dpi = 300)
 
-## For season
-cov_season <- ggplot(cov_long,
-                     aes(x = season, y = value)) +
-  geom_boxplot() +
-  facet_wrap(~variable, scales = "free_y") +
-  labs(y = "Covariate") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
-  theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.title.y = element_text(size = 24))
 
-cov_season
-ggsave("figures/data_exploration/covariate_season_variance.png", cov_season, width = 18, height = 12, dpi = 300)
-
-## Response variable variance across study areas
-resp_long <- cam_stn_cov |>
-  pivot_longer(
-    cols = all_of(resp.vars),
-    names_to = "variable",
-    values_to = "value"
-  )
-
-resp_sa <- ggplot(resp_long,
-                 aes(x = study_area, y = value)) +
-  geom_boxplot() +
-  facet_wrap(~variable, scales = "free_y") +
-  labs(y = "Response variable") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
-  theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.title.y = element_text(size = 24))
-
-win.graph()
-resp_sa
-
-## Save 
-ggsave("figures/data_exploration/response_studyarea_variance.png", resp_sa, width = 18, height = 12, dpi = 300)
-
-
-## Response variables across seasons
-resp_season <- ggplot(resp_long,
-       aes(x = season, y = value)) +
-  geom_boxplot() +
-  facet_wrap(~variable, scales = "free_y") +
-  labs(y = "Covariate") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
-  theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.title.y = element_text(size = 24))
-
-resp_season
-
-ggsave("figures/data_exploration/resp_season_variance.png", resp_season, width = 18, height = 12, dpi = 300)
-
-## Heat map of group-wise variability - darker indicates higher coefficients of variation
-
-## across sites
-site_var <- cov_long |>
-  group_by(variable, site) |>
-  summarize(
-    cv = sd(value, na.rm = TRUE) /
-      mean(value, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-ggplot(site_var,
-       aes(variable, site, fill = cv)) +
-  geom_tile()
-## doesn't seem like there's actually too much variation across sites
-
-
-## Caterpillar plots for locations and sites - summarizes and ranks variability (sd)
-loc_var <- cov_long |>
-  group_by(location, variable) |>
-  summarize(
-    sd = sd(value, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-location_var <- ggplot(loc_var,
-       aes(x = sd,
-           y = reorder(location, sd))) +
-  geom_point() +
-  facet_wrap(~ variable, scales = "free_x") +
-  labs(y = "Locations (Ranked)",
-       x = "Standard Deviation") +
-  theme_bw() +
-  theme(axis.text.x = element_text(size = 14)) +
-  theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.title = element_text(size = 24))
-location_var
-ggsave("figures/data_exploration/covariate_location_sd.png", location_var, width = 18, height = 12, dpi = 300)
-
-### Low standard deviations across locations, except for climate variables
 
 ### Levene's test for study area - p > 0.05 indicates variance across groups is similar enough to be considered equal
 ## Create tibble testing variance across multiple grouping variables
 
 group_vars <- c(
   "study_area",
-  "site",
-  "location",
-  "month",
-  "year",
-  "season"
+  "site"
 )
 
 levene_results <- expand_grid(
-  variable = c(resp.vars, cov.vars), # test for all variables
+  variable = cov.vars, # test for all variables
   group = group_vars
 ) |>
   rowwise() |>
@@ -654,8 +486,73 @@ levene_results <- expand_grid(
 levene_results |>
   filter(if_any(-variable, ~ .x < 0.05))
 
-summary(cam_stn_cov)
+## High degree of variance for all covariates across study_areas and sites (use site and study_area as random effects)
 
+
+## Response variables - Moose detections across seasons (use full df to plot seasons together)
+Moose_season <- ggplot(cam_stn_cov,
+       aes(x = study_area, y = Moose)) +
+  geom_boxplot() +
+  facet_wrap(~season, scales = "free_y") +
+  labs(y = "Moose Detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+Moose_season
+
+ggsave("figures/data_exploration/Moose_season_variance.png", Moose_season, width = 18, height = 12, dpi = 300)
+
+
+## Ptarmigans across seasons
+ptarm_season <- ggplot(cam_stn_cov,
+                       aes(x = study_area, y = Ptarmigans)) +
+  geom_boxplot() +
+  facet_wrap(~season, scales = "free_y") +
+  labs(y = "Ptarmigan Detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+ptarm_season
+
+ggsave("figures/data_exploration/Ptarmigan_season_variance.png", ptarm_season, width = 18, height = 12, dpi = 300)
+
+## Spruce grouse across seasons
+spgr_season <- ggplot(cam_stn_cov,
+                       aes(x = study_area, y = Spruce.Grouse)) +
+  geom_boxplot() +
+  facet_wrap(~season, scales = "free_y") +
+  labs(y = "SPGR Detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+spgr_season
+
+ggsave("figures/data_exploration/spgr_season_variance.png", spgr_season, width = 18, height = 12, dpi = 300)
+
+## Sharp-tailed grouse across seasons
+stgr_season <- ggplot(cam_stn_cov,
+                      aes(x = study_area, y = Sharptailed.Grouse)) +
+  geom_boxplot() +
+  facet_wrap(~season, scales = "free_y") +
+  labs(y = "STGR Detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+stgr_season
+
+ggsave("figures/data_exploration/stgr_season_variance.png", stgr_season, width = 18, height = 12, dpi = 300)
 
 ### 3. Normality and 4. Zero-inflation
 ## (don't really expect (m)any of the variables to be normal)
@@ -670,7 +567,8 @@ cov_hist <- ggplot(cov_long,
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
   theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.title.y = element_text(size = 24))
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
 
 
 win.graph()
@@ -679,32 +577,93 @@ cov_hist
 ## save
 ggsave("figures/data_exploration/covariate_histograms.png", cov_hist, width = 18, height = 12, dpi = 300)
 
-resp_hist <- ggplot(resp_long,
-                   aes(x = value)) +
+
+## Moose
+Moose_hist <- ggplot(cam_stn_cov,
+                   aes(x = Moose)) +
   geom_histogram(bins = 30) +
-  facet_wrap(~variable, scales = "free_x") +
-  labs(y = "Response variable") +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "Moose detections") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
   theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.title.y = element_text(size = 24))
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
 
 
 win.graph()
-resp_hist ## soooo zero-inflated!!
+Moose_hist ## soooo zero-inflated!!
 
 # save
-ggsave("figures/data_exploration/response_histograms.png", resp_hist, width = 18, height = 12, dpi = 300)
+ggsave("figures/data_exploration/Moose_histograms.png", Moose_hist, width = 18, height = 12, dpi = 300)
+
+## Ptarmigans
+Ptarmigans_hist <- ggplot(cam_stn_cov,
+                     aes(x = Ptarmigans)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "Ptarmigan detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+
+win.graph()
+Ptarmigans_hist ## soooo zero-inflated!!
+
+# save
+ggsave("figures/data_exploration/Ptarmigan_histograms.png", Ptarmigans_hist, width = 18, height = 12, dpi = 300)
+
+## SPGR
+SPGR_hist <- ggplot(cam_stn_cov,
+                     aes(x = Spruce.Grouse)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "SPGR detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+
+win.graph()
+SPGR_hist ## soooo zero-inflated!!
+
+# save
+ggsave("figures/data_exploration/SPGR_histograms.png", SPGR_hist, width = 18, height = 12, dpi = 300)
+
+## STGR
+STGR_hist <- ggplot(cam_stn_cov,
+                    aes(x = Sharptailed.Grouse)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "STGR detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+
+win.graph()
+STGR_hist ## soooo zero-inflated!!
+
+# save
+ggsave("figures/data_exploration/STGR_histograms.png", STGR_hist, width = 18, height = 12, dpi = 300)
+
 
 
 #### 5. Collinearity ####
 
 # Compute the correlation matrix
-glimpse(cam_stn_cov) ## only test continuous variables that will be included in models
+glimpse(snow_data) ## only test continuous variables that will be included in models
 
 model.var <- cam_stn_cov |> 
-  select(active_days, Bison, Moose, Muskox, Woodland.Caribou, Snowshoe.Hare, Ptarmigans, Ruffed.Grouse, Sharp.tailed.Grouse, Spruce.Grouse, 
-         PAS, Tave, tri_500m, FireAge, mean_severity, fsev_max_raw, proportion_burned_500m, conifer, deciduous, mixed, shrubland, grassland, wetland, barren)
+  select(active_days, Bison, Moose, Muskox, Woodland.Caribou, Snowshoe.Hare, Ptarmigans, Ruffed.Grouse, Sharptailed.Grouse, Spruce.Grouse, 
+         prop_burned, burn_age, burn_severity, fsev_max)
 
 cor_matrix <- cor(
   model.var,
@@ -729,7 +688,7 @@ corplot <- corrplot::corrplot(
 
 ## To save, open a graphics device with defined ratio and resolution first
 png(
-  filename = "figures/data_exploration/correlation_plot.png",
+  filename = "figures/data_exploration/fire_variables_correlation_plot.png",
   width = 12000,
   height = 8000,
   res = 600
@@ -749,147 +708,181 @@ corrplot::corrplot(
 
 dev.off()
 
-
-#### Examine VIFs (variance inflation factors)
-
-## only include variables that would be included in the model
-moose_vif <- lm(Moose ~ ., data = cam_stn_cov |> 
-                select(Moose, Tave, tri_500m, FireAge, mean_severity, proportion_burned_500m, mixed, wetland))
-
-
-vif(moose_vif) 
-## Tave               tri_500m                FireAge          mean_severity proportion_burned_500m                  mixed                wetland 
-## 1.002814               1.329209               1.327969               1.242029               1.043838               1.223853               1.389878 
-
-caribou_vif <- lm(Woodland.Caribou ~ ., data = cam_stn_cov |> 
-                  select(Woodland.Caribou, Tave, tri_500m, FireAge, mean_severity, proportion_burned_500m, conifer))
-
-vif(caribou_vif)
-
-## Tave               tri_500m                FireAge          mean_severity proportion_burned_500m                conifer 
-## 1.002388               1.056968               1.254089               1.592201               1.049258               1.485476 
-
-muskox_vif <- lm(Muskox ~ ., data = cam_stn_cov |> 
-                    select(Muskox, Tave, tri_500m, FireAge, mean_severity, proportion_burned_500m, shrubland, barren))
-
-vif(muskox_vif)
-## Tave               tri_500m                FireAge          mean_severity proportion_burned_500m              shrubland                 barren 
-## 1.004710               1.114559               1.346867               1.331037               1.045815               1.172727               1.134364
-
-bison_vif <- lm(Bison ~ ., data = cam_stn_cov |> 
-                   select(Bison, Tave, tri_500m, FireAge, mean_severity, proportion_burned_500m, shrubland, grassland))
-
-vif(bison_vif)
-## Tave               tri_500m                FireAge          mean_severity proportion_burned_500m              shrubland              grassland 
-## 1.005997               1.127149               1.503841               1.498720               1.074208               1.525912               1.849290
-
-## aliased coefficients (one variable perfectly correlated with another)
-## which are the 'aliased' coefficients? (Removed, weren't going to be included anyway)
-## alias(mod_vif) ## Tmin, water, urban, burned_binary
+## only strongly correlated variables are the two severity variables
 
 
 ### 7. Interactions
 ## We hypothesize that the effect of prop_burned will vary with age and severity
 
-m1 <- glm(Moose ~ proportion_burned_500m*FireAge, data = cam_stn_cov, family = "poisson")
-summary(m1) # slightly positive interaction
+m1.snow <- glm(Moose ~ prop_burned*burn_age, data = snow_data, family = "poisson")
+summary(m1.snow) # slightly positive interaction
 
 ## Plot interaction
-interact_plot(m1, pred = FireAge, modx = proportion_burned_500m, modx.values = "terciles")
+interact_plot(m1.snow, pred = prop_burned, modx = burn_age, modx.values = "terciles")
 # suggested moose detections are higher with higher proportion burned, and that this effect is greater the older a fire is
 
-m2 <- glm(Moose ~ proportion_burned_500m*mean_severity, data = cam_stn_cov, family = "poisson")
-summary(m2)
+m1.sf <- glm(Moose ~ prop_burned*burn_age, data = snowfree_data, family = "poisson")
+summary(m1.sf) # slightly positive interaction
 
-interact_plot(m2, pred = mean_severity, modx = proportion_burned_500m, modx.values = "terciles")
-## so moose detections may be higher with higher proportions burned, but only at low severity burns (though in this case, low severity = 0, middle = 0.129, and upper = 0.488)
+## Plot interaction
+interact_plot(m1.sf, pred = prop_burned, modx = burn_age, modx.values = "terciles")
+# suggested moose detections are higher with higher proportion burned, and that this effect is greater the older a fire is. Effect stronger in the summer
+
+m2.snow <- glm(Moose ~ prop_burned*burn_severity, data = snow_data, family = "poisson")
+summary(m2.snow)
+
+interact_plot(m2.snow, pred = prop_burned, modx = burn_severity, modx.values = c(0.25, 0.5, 0.75)) #specify burn severity values to test
+## so moose detections may be higher with higher proportions burned, but only at low severity burns. At higher severity, effect reverses
 # at moderate severity, the positive effect of burn size is diminished
 
-## interaction between fire age and mixed?
-m3 <- glm(Moose ~ FireAge*mixed, data = cam_stn_cov, family = "poisson")
-summary(m3) # no likely interaction
+## snow-free
+m2.sf <- glm(Moose ~ prop_burned*burn_severity, data = snowfree_data, family = "poisson")
+summary(m2.sf)
 
-interact_plot(m3, pred = mixed, modx = FireAge, modx.values = "terciles")
-
-m4 <- glm(Moose ~ mean_severity*mixed, data = cam_stn_cov, family = "poisson")
-summary(m4) # potential interaction between severity and mixed forest
-
-interact_plot(m4, pred = mixed, modx = mean_severity, modx.values = "terciles")
-## moose prefer mixed wood only at no to low severity burn?
-
-## Caribou - only occur in Sambaa K'e, Norman Wells, and Edehzhie
-unique(cam_stn_cov$study_area)
-
-caribou_stn_cov <- cam_stn_cov |> filter(study_area == "Edéhzhíe" |
-                                           study_area == "SambaaK'e" |
-                                           study_area == "NormanWells")
-
-c1 <- glm(Woodland.Caribou ~ proportion_burned_500m*FireAge, data = caribou_stn_cov, family = "poisson")
-summary(c1)
-interact_plot(c1, pred = proportion_burned_500m, modx = FireAge, modx.values = "terciles")
-## suggests that caribou decrease with burn size but only in old burns (40). In 27/28 year old burns, caribou prefer more burned area
-
-
-c2 <- glm(Woodland.Caribou ~ proportion_burned_500m*mean_severity, data = caribou_stn_cov, family = "poisson")
-summary(c2)
-interact_plot(c2, pred = proportion_burned_500m, modx = mean_severity)
-
-# interaction between fire age and conifer?
-c3 <- glm(Woodland.Caribou ~ FireAge*conifer, data = caribou_stn_cov, family = "poisson")
-summary(c3) ## no likely interaction
-
-c4 <- glm(Woodland.Caribou ~ mean_severity*conifer, data = caribou_stn_cov, family = "poisson")
-summary(c4) ## negative interaction
-
-interact_plot(c4, pred = conifer, modx = mean_severity, modx.values = "terciles")
-## negative effect of conifer is diminished at low/no severity (why is conifer negative)
-
-
-## Muskox - only occur in NormanWells, Gameti, and ThaideneNene
-muskox_stn_cov <- cam_stn_cov |> filter(study_area == "ThaideneNëné" |
-                                           study_area == "Gameti" |
-                                           study_area == "NormanWells")
-
-mx1 <- glm(Muskox ~ proportion_burned_500m*mean_severity, data = muskox_stn_cov, family = "poisson")
-summary(mx1)
-interact_plot(mx1, pred = proportion_burned_500m, modx = mean_severity)
-## Muskox only prefer burns at low severity, don't use areas with moderate severity
-
-mx2 <- glm(Muskox ~ proportion_burned_500m*FireAge, data = muskox_stn_cov, family = "poisson")
-summary(mx2)
-interact_plot(mx2, pred = proportion_burned_500m, modx = FireAge, modx.values = "terciles")
-## Muskox detections decrease with burn size, strongest effect with older burns
-
-
-### Still need to test interactions with landcover for muskox and all interactions for bison
+interact_plot(m2.sf, pred = prop_burned, modx = burn_severity, modx.values = c(0.25, 0.5, 0.75)) #specify burn severity values to test
+## no sig. interaction in the summer
 
 
 
 
+#### Snow and snow-free datasets for other species ####
+## Datasets for non-moose ungulate species and ruffed grouse
 
 
+#### Woodland caribou
+wcaribou_studyareas <- c("Edéhzhíe", "NormanWells", "SambaaK'e")
+caribou_stns <- cam_stn_cov |> 
+  filter(study_area %in% wcaribou_studyareas)
+
+## Subset by season
+snow_caribou <- caribou_stns |> filter(season == "snow")
+snowfree_caribou <- caribou_stns |> filter(season == "snow-free")
+
+## How many data points do we have for each model? Subtract NAs in burn_age and burn_severity from total observations
+summary(snow_caribou)
+summary(snowfree_caribou)
+
+## Distribution of caribou data in snow and snow-free seasons
+caribou_hist <- ggplot(caribou_stns,
+                     aes(x = Woodland.Caribou)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "Caribou detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
 
 
+win.graph()
+caribou_hist ## soooo zero-inflated!!
+
+# save
+ggsave("figures/data_exploration/Caribou_histograms.png", caribou_hist, width = 18, height = 12, dpi = 300)
 
 
+### Muskox
+
+muskox_studyareas <- c("ThaideneNëné", "NormanWells", "Gameti")
+
+muskox_stns <- cam_stn_cov |> 
+  filter(study_area %in% muskox_studyareas)
+
+## Subset by season
+snow_muskox <- muskox_stns |> filter(season == "snow")
+snowfree_muskox <- muskox_stns |> filter(season == "snow-free")
+
+## How many data points do we have for each model? Subtract NAs in burn_age and burn_severity from total observations
+summary(snow_muskox)
+summary(snowfree_muskox)
+
+## Distribution of muskox data in snow and snow-free seasons
+muskox_hist <- ggplot(muskox_stns,
+                       aes(x = Muskox)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "Muskox detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
 
 
-#### Testing random effects structures with generalized linear mixed-effects models ####
-moose.lmer <- glmer(Moose ~ 1 + (1|study_area/site/location), data = cam_stn_cov, family = "poisson")
+win.graph()
+muskox_hist ## soooo zero-inflated!!
 
-summary(moose.lmer) ## study_area random effect is singular (variance is 0). All 
-
-moose.lmer2 <- glmer(Moose ~ 1 + (1|site/location), data = cam_stn_cov, family = "poisson")
-summary(moose.lmer2) ## some variability across sites and locations, but not much
-VarCorr(moose.lmer2)
+# save
+ggsave("figures/data_exploration/muskox_histograms.png", muskox_hist, width = 18, height = 12, dpi = 300)
 
 
-caribou.lmer <- glmer(Woodland.Caribou ~  1 + (1|study_area/site/location), data = caribou_stn_cov, family = "poisson")
+### Bison
+bison_studyareas <- c("Edéhzhíe", "FortSmith")
 
-summary(caribou.lmer) ## location is singular
-caribou.lmer2 <- glmer(Woodland.Caribou ~  1 + (1|study_area/site), data = caribou_stn_cov, family = "poisson")
-summary(caribou.lmer2)
+bison_stns <- cam_stn_cov |> 
+  filter(study_area %in% bison_studyareas)
 
-## Would we expect the effect of fire to differ across study areas?
-moose.me.fire <- glmer(Moose ~ proportion_burned_500m + (1|study_area), data = cam_stn_cov, family = "poisson")
-summary(moose.me.fire)
+## Subset by season
+snow_bison <- bison_stns |> filter(season == "snow")
+snowfree_bison <- bison_stns |> filter(season == "snow-free")
+
+## How many data points do we have for each model? Subtract NAs in burn_age and burn_severity from total observations
+summary(snow_bison)
+summary(snowfree_bison)
+
+## Distribution of bison data in snow and snow-free seasons
+bison_hist <- ggplot(bison_stns,
+                      aes(x = Bison)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "Bison detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+
+win.graph()
+bison_hist ## soooo zero-inflated!!
+
+# save
+ggsave("figures/data_exploration/bison_histograms.png", bison_hist, width = 18, height = 12, dpi = 300)
+
+
+### Ruffed Grouse - based on distribution map on Birds of The World, could expect to find RUGR in Sambaa K'e, Edehzhie, and Fort Smith
+## we only detected them on camera in EDE and FS, but detected on ARUs in Gameti and Sambaa K'e as well
+## Include SK, EDE, FS, and Gam (exclude TDN and NW)
+RUGR_studyareas <- c("Edéhzhíe", "FortSmith", "SambaaK'e", "Gameti")
+
+RUGR_stns <- cam_stn_cov |> 
+  filter(study_area %in% RUGR_studyareas)
+
+## Subset by season
+snow_RUGR <- RUGR_stns |> filter(season == "snow")
+snowfree_RUGR <- RUGR_stns |> filter(season == "snow-free")
+
+## How many data points do we have for each model? Subtract NAs in burn_age and burn_severity from total observations
+summary(snow_RUGR)
+summary(snowfree_RUGR)
+
+## Distribution of RUGR data in snow and snow-free seasons
+RUGR_hist <- ggplot(RUGR_stns,
+                     aes(x = Ruffed.Grouse)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~season, scales = "free_x") +
+  labs(y = "RUGR detections") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.9,size = 14)) +
+  theme(axis.text.y = element_text(size = 14)) +
+  theme(axis.title.y = element_text(size = 24)) +
+  theme(strip.text = element_text(size = 16))
+
+
+win.graph()
+RUGR_hist ## soooo zero-inflated, probably won't be able to model
+
+# save
+ggsave("figures/data_exploration/RUGR_histograms.png", RUGR_hist, width = 18, height = 12, dpi = 300)
+
