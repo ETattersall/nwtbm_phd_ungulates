@@ -23,17 +23,18 @@ summary(cam_det)
 stn_cov <- read.csv("data/cov_data/nwtbm_sensor_covariate_data.csv")
 glimpse(stn_cov) # includes topography, prop_burned, and fireage, but NOT severity
 summary(stn_cov) #fireage has 423 (>50%) NAs - unburned sites
+stn_cov$X <- NULL
 
 
 ## load fire severity data
 stn_fsev <- read.csv("data/cov_data/nwtbm_sensor_ntems_fireseverity.csv")
 glimpse(stn_fsev)
 summary(stn_fsev)
+stn_fsev$X <- NULL
 
 
-## mean_severity is the mean calculated after non-fire cells were removed and the fire selection rule was applied
-## fsev_mean_raw is the raw mean calculated directly from fsev data
-## fsev_mean_max is the raw max
+## mean_severity and max_severity are the mean/max calculated after non-fire cells were removed and the fire selection rule was applied
+
 
 ### Climate data -stn
 stn_clim <- read.csv("data/cov_data/nwtbm_sensor_climate_covariate_data.csv")
@@ -222,8 +223,7 @@ seas_temp # mean snow season temperature between -17 - -7; snow-free between 10 
 
 
 #### Add fire severity to station data ####
-glimpse(stn_cov)
-stn_cov$X <- NULL
+
 
 
 ## Add binary variable for burned/unburned based on FireAge
@@ -238,7 +238,7 @@ hist(stn_fsev$mean_severity)
 hist(stn_fsev$fsev_mean_raw) ## almost identical. Remove raw mean 
 
 stn_fsev <- stn_fsev |> 
-  select(study_area, site, location, fire_year, mean_severity, fsev_max_raw)
+  select(study_area, site, location, fire_year, mean_severity, max_severity)
 
 stn_cov <- stn_cov |> 
   left_join(stn_fsev,
@@ -272,13 +272,13 @@ fire_cov <- stn_cov |>
   location   = factor(location),
   site       = factor(site)
 ) |> 
-  select(study_area, location, site, burned_binary, proportion_burned_500m, fire_year, FireAge, mean_severity, fsev_max_raw)
+  select(study_area, location, site, burned_binary, proportion_burned_500m, fire_year, FireAge, mean_severity, max_severity)
 
 glimpse(fire_cov)
 summary(fire_cov)
 
 ## rename fire variables for simplicity
-colnames(fire_cov) <- c("study_area", "location", "site", "burned", "prop_burned", "fire_year", "burn_age", "burn_severity", "fsev_max")
+colnames(fire_cov) <- c("study_area", "location", "site", "burned", "prop_burned", "fire_year", "burn_age", "mean_severity", "max_severity")
 
 ### Add fire covariates to seasonal camera data
 glimpse(cam_det)
